@@ -38,11 +38,10 @@ If not, a "not implemented" exception must be communicated.
 The meters publish data to the proxy using following primary topics:
 * MQTT_RT_DATA: Real-time electrical parameters (Second-level)
 * MQTT_ENY_NOW: Energy consumption data (Minute-level)
-* MQTT_TELEIND: Remote signal data (DI/DO status)
+* MQTT_TELEIND: Remote signal data (DI/DO status - not used currently)
 * MQTT_DAY_DATA: Energy consumption data (Day-level) 
-* MQTT_TELECTRL_REP: Remote control response
-* MQTT_SETTIME_(meterid last 8 bits): Single meter time synchronization
-All devices use the same topic, the meter ID is contained in the data
+* MQTT_COMMOD_SET_(meterid last 8 bits): set upload frequency
+* MQTT_COMMOD_READ_REP: Meter response to MQTT_COMMOD_SET_*
 
 
 ## 5. Data Formatting & Transmission Logic
@@ -62,8 +61,6 @@ See "COMPERE MQTT Protocol V1.9.pdf" and sample messages in tests/test_msg/*.jso
 ## 7. Sending Configuration Dta to Devices
 The KPM33B subscribes to configuration topics at the MQTT broker. Following topics are relevant:
 - Topic: MQTT_COMMOD_SET_<meterid last 8 bits>
-
-
   Payload: 
     {
       "oprid": "Operation id" // Nonce to match the response message; Format 32 bit strings
@@ -71,8 +68,6 @@ The KPM33B subscribes to configuration topics at the MQTT broker. Following topi
       "value": "30",   //interval: Second level (in seconds): 30, 60, 300, 600, 900, 1200, 1800, 3600
                        //          Minute level (in minutes): 1, 5, 10, 15, 20, 30, 60
       "types": "1"     //1=Integer, 2=Float
-
-  
 
 
 ## 8. Implementation Notes

@@ -1,0 +1,37 @@
+# KPM33B Proxy Configuration
+# --------------------------
+
+# KPM33B Internal Broker
+internal_broker:
+  host: "0.0.0.0"
+  port: 11883
+  # Optional: authentication
+
+# External Central Broker
+central_broker:
+  host: "10.4.4.17"
+  port: 1883 # Assuming a different port for the central broker
+  # authentication is required
+  # username: "your_username"
+  # password: "your_password"
+
+# Topics
+internal_broker_topics:
+  meter_seconds_data: "MQTT_RT_DATA"         # meter id in message body
+  meter_minutes_data: "MQTT_ENY_NOW"         # meter id in message body
+  meter_settime: "MQTT_COMMOD_SET_"          # add last 8 bits of meter id
+  meter_settime_ack: "MQTT_COMMOD_READ_REP"  # meter id in message body
+
+central_broker_topics:
+  external_main_topic: "kpm33b"   # Subtopics have the format <deviceid>/seconds and <deviceid>/minutes
+  status_topic: "kpm33b/status"   # Topic to publish status updates for checkmk on the central_broker
+
+# Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "/var/log/kpm33b_proxy.log"
+
+# Meter configuration
+kpm33b_meters:
+  upload_frequency_seconds: 5
+  upload_frequency_minutes: 1
