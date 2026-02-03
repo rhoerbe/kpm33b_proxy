@@ -1,0 +1,15 @@
+[Unit]
+Description=KPM33B MQTT Proxy (Data Flow)
+After=network-online.target kpm33b-broker.service
+Wants=network-online.target
+Requires=kpm33b-broker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kpm33b_proxy
+ExecStart=/opt/kpm33b_proxy/venv/bin/python /opt/kpm33b_proxy/kpm33b_proxy.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

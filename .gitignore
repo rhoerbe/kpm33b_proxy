@@ -26,6 +26,7 @@ github-runner.env
 .claude/settings.local.json
 
 # Application
+config.yaml
 scratch/
 tests/test_out/*
 logs/

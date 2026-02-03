@@ -1,0 +1,13 @@
+[Unit]
+Description=KPM33B Internal MQTT Broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/mosquitto -c /opt/kpm33b_proxy/scripts/kpm33b_broker.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
