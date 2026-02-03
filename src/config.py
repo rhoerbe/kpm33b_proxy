@@ -14,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class BrokerConfig(BaseModel):
     host: str
     port: int
+    username: str | None = None
+    password: str | None = None
 
 
 class InternalBrokerTopics(BaseModel):

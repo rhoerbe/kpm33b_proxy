@@ -27,12 +27,16 @@ class MqttBridge:
 
     def _setup_internal_client(self) -> None:
         self.internal_client = mqtt.Client(client_id="kpm33b_proxy_internal", protocol=mqtt.MQTTv311)
+        if self.config.internal_broker.username:
+            self.internal_client.username_pw_set(self.config.internal_broker.username, self.config.internal_broker.password)
         self.internal_client.on_connect = self._on_internal_connect
         self.internal_client.on_disconnect = self._on_internal_disconnect
         self.internal_client.on_message = self._on_internal_message
 
     def _setup_central_client(self) -> None:
         self.central_client = mqtt.Client(client_id="kpm33b_proxy_central", protocol=mqtt.MQTTv311)
+        if self.config.central_broker.username:
+            self.central_client.username_pw_set(self.config.central_broker.username, self.config.central_broker.password)
         self.central_client.on_connect = self._on_central_connect
         self.central_client.on_disconnect = self._on_central_disconnect
 
