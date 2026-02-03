@@ -12,12 +12,11 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 import pytest
-import yaml
 
 from src.bridge import MqttBridge
 from src.config import AppConfig
 
-MOSQUITTO_BIN = shutil.which("mosquitto")
+MOSQUITTO_BIN = shutil.which("mosquitto") or shutil.which("mosquitto", path="/usr/sbin:/usr/local/sbin")
 pytestmark = pytest.mark.skipif(MOSQUITTO_BIN is None, reason="mosquitto server not installed")
 
 INTERNAL_PORT = 18830
