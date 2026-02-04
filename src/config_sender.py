@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 BACKOFF_BASE = 1
 BACKOFF_MAX = 60
-ACK_TIMEOUT = 3.0
+ACK_TIMEOUT = 15.0
 
 
 def _make_oprid() -> str:

@@ -19,8 +19,8 @@ central_broker:
 internal_broker_topics:
   meter_seconds_data: "MQTT_RT_DATA"         # meter id in message body
   meter_minutes_data: "MQTT_ENY_NOW"         # meter id in message body
-  meter_settime: "MQTT_COMMOD_SET_"          # add last 8 bits of meter id
-  meter_settime_ack: "MQTT_COMMOD_READ_REP"  # meter id in message body
+  meter_settime: "MQTT_COMMOD_SET_"          # add last 8 digits of meter id
+  meter_settime_ack: "MQTT_COMMOD_SET_REP"   # meter id in message body
 
 central_broker_topics:
   external_main_topic: "kpm33b"   # Subtopics have the format <deviceid>/seconds and <deviceid>/minutes

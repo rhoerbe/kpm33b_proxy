@@ -102,7 +102,7 @@ The topic names are defined in config.yaml.
         |                    |      (Subscribed to own topic)         | Device(s)       |
         +--------------------+                                        +-----------------+
                 ^                                                         |
-                |     (4) Publish Ack to MQTT_COMMOD_READ_REP             | 
+                |     (4) Publish Ack to MQTT_COMMOD_SET_REP               | 
                 +---------------------------------------------------------+
 ```
 1.  Config Sender subscribes: The `config_sender.py` application connects to the Central Broker and subscribes to the main topic. The subtopics are the meter device ids.
@@ -110,7 +110,7 @@ The topic names are defined in config.yaml.
     A changed modification date of config.yaml is treated as a discovery of all existing devices. 
 3.  Config Sender publishes Config: The `config_sender.py` connects to the internal broker and sends the upload frequency messages to the MQTT_COMMOD_SET_* topics.
 4.  Device Receives Configuration: The meter subscribe to MQTT_COMMOD_SET_* and receive the configuration message from the KPM33B Broker.
-5.  Device sends acknowledge to MQTT_COMMOD_READ_REP.
+5.  Device sends acknowledge to MQTT_COMMOD_SET_REP.
 6.  Config Sender waits for acknowledge resulting in either an OK log entry or an ALERT log entry if there is a timeout.
 
 ## Deployment

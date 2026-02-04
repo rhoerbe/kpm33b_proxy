@@ -18,7 +18,7 @@ def config():
             "meter_seconds_data": "MQTT_RT_DATA",
             "meter_minutes_data": "MQTT_ENY_NOW",
             "meter_settime": "MQTT_COMMOD_SET_",
-            "meter_settime_ack": "MQTT_COMMOD_READ_REP",
+            "meter_settime_ack": "MQTT_COMMOD_SET_REP",
         },
         central_broker_topics={
             "external_main_topic": "kpm33b",

@@ -40,8 +40,8 @@ The meters publish data to the proxy using following primary topics:
 * MQTT_ENY_NOW: Energy consumption data (Minute-level)
 * MQTT_TELEIND: Remote signal data (DI/DO status - not used currently)
 * MQTT_DAY_DATA: Energy consumption data (Day-level) 
-* MQTT_COMMOD_SET_(meterid last 8 bits): set upload frequency
-* MQTT_COMMOD_READ_REP: Meter response to MQTT_COMMOD_SET_*
+* MQTT_COMMOD_SET_(meterid last 8 digits): set upload frequency
+* MQTT_COMMOD_SET_REP: Meter response to MQTT_COMMOD_SET_*
 
 
 ## 5. Data Formatting & Transmission Logic
@@ -60,7 +60,7 @@ See "COMPERE MQTT Protocol V1.9.pdf" and sample messages in tests/test_msg/*.jso
 
 ## 7. Sending Configuration Dta to Devices
 The KPM33B subscribes to configuration topics at the MQTT broker. Following topics are relevant:
-- Topic: MQTT_COMMOD_SET_<meterid last 8 bits>
+- Topic: MQTT_COMMOD_SET_<meterid last 8 digits>
   Payload: 
     {
       "oprid": "Operation id" // Nonce to match the response message; Format 32 bit strings

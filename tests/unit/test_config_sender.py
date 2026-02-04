@@ -19,7 +19,7 @@ def config():
             "meter_seconds_data": "MQTT_RT_DATA",
             "meter_minutes_data": "MQTT_ENY_NOW",
             "meter_settime": "MQTT_COMMOD_SET_",
-            "meter_settime_ack": "MQTT_COMMOD_READ_REP",
+            "meter_settime_ack": "MQTT_COMMOD_SET_REP",
         },
         central_broker_topics={
             "external_main_topic": "kpm33b",
@@ -101,7 +101,7 @@ class TestInternalConnect:
     def test_subscribes_to_ack_topic(self, sender):
         mock_client = MagicMock()
         sender._on_internal_connect(mock_client, None, {}, 0)
-        mock_client.subscribe.assert_called_once_with("MQTT_COMMOD_READ_REP")
+        mock_client.subscribe.assert_called_once_with("MQTT_COMMOD_SET_REP")
 
 
 class TestSendConfig:
@@ -133,7 +133,7 @@ class TestAckHandling:
         event = threading.Event()
         sender._pending_acks["abc123"] = event
         msg = MagicMock()
-        msg.topic = "MQTT_COMMOD_READ_REP"
+        msg.topic = "MQTT_COMMOD_SET_REP"
         msg.payload = json.dumps({"oprid": "abc123"}).encode()
 
         sender._on_internal_message(None, None, msg)
@@ -143,21 +143,21 @@ class TestAckHandling:
 
     def test_unknown_oprid_ignored(self, sender):
         msg = MagicMock()
-        msg.topic = "MQTT_COMMOD_READ_REP"
+        msg.topic = "MQTT_COMMOD_SET_REP"
         msg.payload = json.dumps({"oprid": "unknown"}).encode()
         sender._on_internal_message(None, None, msg)
         # No error raised
 
     def test_invalid_json_ack(self, sender):
         msg = MagicMock()
-        msg.topic = "MQTT_COMMOD_READ_REP"
+        msg.topic = "MQTT_COMMOD_SET_REP"
         msg.payload = b"not json"
         sender._on_internal_message(None, None, msg)
         # No error raised
 
     def test_ack_missing_oprid(self, sender):
         msg = MagicMock()
-        msg.topic = "MQTT_COMMOD_READ_REP"
+        msg.topic = "MQTT_COMMOD_SET_REP"
         msg.payload = json.dumps({"something": "else"}).encode()
         sender._on_internal_message(None, None, msg)
         # No error raised
