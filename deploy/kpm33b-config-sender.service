@@ -6,6 +6,8 @@ Requires=kpm33b-broker.service
 
 [Service]
 Type=simple
+User=kpm33b
+Group=kpm33b
 WorkingDirectory=/opt/kpm33b_proxy
 ExecStart=/opt/kpm33b_proxy/venv/bin/python /opt/kpm33b_proxy/run_config_sender.py
 Restart=on-failure

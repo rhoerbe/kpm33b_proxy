@@ -5,6 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=kpm33b
+Group=kpm33b
 ExecStart=/usr/sbin/mosquitto -c /opt/kpm33b_proxy/scripts/kpm33b_broker.conf
 Restart=on-failure
 RestartSec=5
