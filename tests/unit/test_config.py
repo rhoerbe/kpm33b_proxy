@@ -85,3 +85,35 @@ def test_exclude_device_ids_with_values(tmp_path, valid_config_dict):
     config_file.write_text(yaml.dump(valid_config_dict))
     config = load_config(config_file)
     assert config.kpm33b_meters.exclude_device_ids == ["000000000000", "FFFFFFFFFFFF"]
+
+
+def test_device_contexts_optional(valid_config_dict):
+    """device_contexts defaults to None when not specified."""
+    config = AppConfig(**valid_config_dict)
+    assert config.kpm33b_meters.device_contexts is None
+
+
+def test_device_contexts_with_values(tmp_path, valid_config_dict):
+    """device_contexts can map device IDs to location/function contexts."""
+    valid_config_dict["kpm33b_meters"]["device_contexts"] = {
+        "33B1225950027": "building1/floor2",
+        "33B1225950028": "building2",
+    }
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(valid_config_dict))
+    config = load_config(config_file)
+    assert config.kpm33b_meters.device_contexts == {
+        "33B1225950027": "building1/floor2",
+        "33B1225950028": "building2",
+    }
+
+
+def test_device_contexts_with_nested_path(tmp_path, valid_config_dict):
+    """device_contexts supports nested paths with multiple slashes."""
+    valid_config_dict["kpm33b_meters"]["device_contexts"] = {
+        "33B1225950027": "campus/building1/floor2/room101",
+    }
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(valid_config_dict))
+    config = load_config(config_file)
+    assert config.kpm33b_meters.device_contexts["33B1225950027"] == "campus/building1/floor2/room101"

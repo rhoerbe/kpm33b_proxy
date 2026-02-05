@@ -67,6 +67,21 @@ class MqttBridge:
         if rc != 0:
             logger.warning("Unexpected disconnect from central broker (rc=%d), will reconnect", rc)
 
+    def _get_device_context(self, device_id: str) -> str | None:
+        """Get context for a device from config, if any."""
+        device_contexts = self.config.kpm33b_meters.device_contexts
+        if device_contexts:
+            return device_contexts.get(device_id)
+        return None
+
+    def _build_topic_prefix(self, device_id: str) -> str:
+        """Build topic prefix for a device, including context if configured."""
+        main_topic = self.config.central_broker_topics.external_main_topic
+        context = self._get_device_context(device_id)
+        if context:
+            return f"{main_topic}/{context}/{device_id}"
+        return f"{main_topic}/{device_id}"
+
     def _on_internal_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
         topic = msg.topic
         try:
@@ -82,11 +97,13 @@ class MqttBridge:
             if topic == topics.meter_seconds_data:
                 transformed = transform_rt_data(raw)
                 device_id = transformed.get("id", "unknown")
-                target_topic = f"{main_topic}/{device_id}/seconds"
+                topic_prefix = self._build_topic_prefix(device_id)
+                target_topic = f"{topic_prefix}/seconds"
             elif topic == topics.meter_minutes_data:
                 transformed = transform_eny_now(raw)
                 device_id = transformed.get("id", "unknown")
-                target_topic = f"{main_topic}/{device_id}/minutes"
+                topic_prefix = self._build_topic_prefix(device_id)
+                target_topic = f"{topic_prefix}/minutes"
             else:
                 logger.debug("Ignoring message on unhandled topic %s", topic)
                 return
@@ -103,8 +120,9 @@ class MqttBridge:
         # Publish HA autodiscovery on first message from a new meter
         if device_id not in self.discovered_meters and device_id != "unknown":
             self.discovered_meters.add(device_id)
+            context = self._get_device_context(device_id)
             logger.info("New meter discovered: %s — publishing HA autodiscovery", device_id)
-            publish_discovery(self.central_client, device_id, main_topic)
+            publish_discovery(self.central_client, device_id, main_topic, context)
 
         payload = json.dumps(transformed)
         result = self.central_client.publish(target_topic, payload, qos=1)

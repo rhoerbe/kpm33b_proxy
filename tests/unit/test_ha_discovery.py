@@ -137,3 +137,45 @@ class TestPublishDiscovery:
 
         assert power["device"]["identifiers"] == energy["device"]["identifiers"]
         assert power["device"]["name"] == energy["device"]["name"]
+
+
+class TestContextSupport:
+    """Tests for optional context parameter in discovery payloads."""
+
+    def test_power_payload_with_context(self):
+        context = "building1/floor2"
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, context)
+        assert payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/seconds"
+
+    def test_power_payload_without_context(self):
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, None)
+        assert payload["state_topic"] == f"{BASE_TOPIC}/{METER_ID}/seconds"
+
+    def test_energy_payload_with_context(self):
+        context = "building1/floor2"
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC, context)
+        assert payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/minutes"
+
+    def test_energy_payload_without_context(self):
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC, None)
+        assert payload["state_topic"] == f"{BASE_TOPIC}/{METER_ID}/minutes"
+
+    def test_publish_discovery_with_context(self):
+        client = MagicMock()
+        client.publish.return_value = MagicMock(rc=0)
+        context = "building1/floor2"
+
+        publish_discovery(client, METER_ID, BASE_TOPIC, context)
+
+        power_call = client.publish.call_args_list[0]
+        power_payload = json.loads(power_call.args[1])
+        assert power_payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/seconds"
+
+        energy_call = client.publish.call_args_list[1]
+        energy_payload = json.loads(energy_call.args[1])
+        assert energy_payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/minutes"
+
+    def test_context_with_nested_path(self):
+        context = "campus/building1/floor2/room101"
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, context)
+        assert payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/seconds"

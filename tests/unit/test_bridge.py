@@ -54,6 +54,33 @@ def config_with_exclusion():
 
 
 @pytest.fixture
+def config_with_contexts():
+    return AppConfig(
+        internal_broker={"host": "localhost", "port": 11883},
+        central_broker={"host": "localhost", "port": 1883},
+        internal_broker_topics={
+            "meter_seconds_data": "MQTT_RT_DATA",
+            "meter_minutes_data": "MQTT_ENY_NOW",
+            "meter_settime": "MQTT_COMMOD_SET_",
+            "meter_settime_ack": "MQTT_COMMOD_SET_REP",
+        },
+        central_broker_topics={
+            "external_main_topic": "kpm33b",
+            "status_topic": "kpm33b/status",
+        },
+        logging={"level": "DEBUG"},
+        kpm33b_meters={
+            "upload_frequency_seconds": 5,
+            "upload_frequency_minutes": 1,
+            "device_contexts": {
+                "33B1225950027": "building1/floor2",
+                "33B1225950028": "building2",
+            },
+        },
+    )
+
+
+@pytest.fixture
 def bridge(config):
     with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
         b = MqttBridge(config)
@@ -64,6 +91,13 @@ def bridge(config):
 def bridge_with_exclusion(config_with_exclusion):
     with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
         b = MqttBridge(config_with_exclusion)
+    return b
+
+
+@pytest.fixture
+def bridge_with_contexts(config_with_contexts):
+    with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
+        b = MqttBridge(config_with_contexts)
     return b
 
 
@@ -224,6 +258,106 @@ class TestDeviceIdExclusion:
 
         # Should publish even for "fake" device when no exclusion list
         assert bridge.central_client.publish.call_count >= 1
+
+
+class TestDeviceContext:
+    """Tests for device context (location/function) in MQTT topics."""
+
+    def _make_msg(self, topic: str, payload: dict) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    def test_get_device_context_returns_context(self, bridge_with_contexts):
+        context = bridge_with_contexts._get_device_context("33B1225950027")
+        assert context == "building1/floor2"
+
+    def test_get_device_context_returns_none_for_unknown(self, bridge_with_contexts):
+        context = bridge_with_contexts._get_device_context("33BUNKNOWN000")
+        assert context is None
+
+    def test_get_device_context_returns_none_when_no_contexts(self, bridge):
+        context = bridge._get_device_context("33B1225950027")
+        assert context is None
+
+    def test_build_topic_prefix_with_context(self, bridge_with_contexts):
+        prefix = bridge_with_contexts._build_topic_prefix("33B1225950027")
+        assert prefix == "kpm33b/building1/floor2/33B1225950027"
+
+    def test_build_topic_prefix_without_context(self, bridge_with_contexts):
+        prefix = bridge_with_contexts._build_topic_prefix("33BUNKNOWN000")
+        assert prefix == "kpm33b/33BUNKNOWN000"
+
+    def test_build_topic_prefix_no_contexts_config(self, bridge):
+        prefix = bridge._build_topic_prefix("33B1225950027")
+        assert prefix == "kpm33b/33B1225950027"
+
+    def test_rt_data_publishes_with_context(self, bridge_with_contexts):
+        payload = {
+            "id": "33B1225950027", "time": "20260112163900",
+            "zyggl": 6.6905, "isend": "1",
+        }
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge_with_contexts.central_client.publish = MagicMock()
+        bridge_with_contexts.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge_with_contexts._on_internal_message(None, None, msg)
+
+        # Data publish is the last call
+        data_call = bridge_with_contexts.central_client.publish.call_args_list[-1]
+        assert data_call.args[0] == "kpm33b/building1/floor2/33B1225950027/seconds"
+
+    def test_eny_now_publishes_with_context(self, bridge_with_contexts):
+        payload = {
+            "id": "33B1225950028", "time": "20260117211500",
+            "zygsz": 163.486, "isend": "1",
+        }
+        msg = self._make_msg("MQTT_ENY_NOW", payload)
+        bridge_with_contexts.central_client.publish = MagicMock()
+        bridge_with_contexts.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge_with_contexts._on_internal_message(None, None, msg)
+
+        # Data publish is the last call
+        data_call = bridge_with_contexts.central_client.publish.call_args_list[-1]
+        assert data_call.args[0] == "kpm33b/building2/33B1225950028/minutes"
+
+    def test_device_without_context_uses_direct_topic(self, bridge_with_contexts):
+        """Device not in device_contexts map should use direct topic format."""
+        payload = {
+            "id": "33BUNKNOWN000", "time": "20260112163900",
+            "zyggl": 1.0, "isend": "1",
+        }
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge_with_contexts.central_client.publish = MagicMock()
+        bridge_with_contexts.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge_with_contexts._on_internal_message(None, None, msg)
+
+        data_call = bridge_with_contexts.central_client.publish.call_args_list[-1]
+        assert data_call.args[0] == "kpm33b/33BUNKNOWN000/seconds"
+
+    def test_ha_discovery_includes_context(self, bridge_with_contexts):
+        """HA discovery state_topic should include context if configured."""
+        payload = {
+            "id": "33B1225950027", "time": "20260112163900",
+            "zyggl": 6.0, "isend": "1",
+        }
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge_with_contexts.central_client.publish = MagicMock()
+        bridge_with_contexts.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge_with_contexts._on_internal_message(None, None, msg)
+
+        # Find the power discovery call
+        for call in bridge_with_contexts.central_client.publish.call_args_list:
+            if "power/config" in call.args[0]:
+                discovery_payload = json.loads(call.args[1])
+                assert discovery_payload["state_topic"] == "kpm33b/building1/floor2/33B1225950027/seconds"
+                break
+        else:
+            pytest.fail("Power discovery message not found")
 
 
 class TestStartStop:

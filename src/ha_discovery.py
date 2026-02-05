@@ -34,20 +34,25 @@ def _device_block(meter_id: str) -> dict:
     }
 
 
-def make_power_discovery_payload(meter_id: str, base_topic: str) -> dict:
+def make_power_discovery_payload(meter_id: str, base_topic: str, context: str | None = None) -> dict:
     """Generate HA discovery payload for the power sensor.
 
     Args:
         meter_id: The 13-character meter ID (e.g., "33B1225950027")
         base_topic: The base topic for meter data (e.g., "kpm33b")
+        context: Optional location/function context (e.g., "building1/floor2")
 
     Returns:
         Discovery payload dict ready for JSON serialization
     """
+    if context:
+        state_topic = f"{base_topic}/{context}/{meter_id}/seconds"
+    else:
+        state_topic = f"{base_topic}/{meter_id}/seconds"
     return {
         "name": "Active Power",
         "unique_id": f"kpm33b_{meter_id}_power",
-        "state_topic": f"{base_topic}/{meter_id}/seconds",
+        "state_topic": state_topic,
         "device_class": "power",
         "state_class": "measurement",
         "unit_of_measurement": "kW",
@@ -56,20 +61,25 @@ def make_power_discovery_payload(meter_id: str, base_topic: str) -> dict:
     }
 
 
-def make_energy_discovery_payload(meter_id: str, base_topic: str) -> dict:
+def make_energy_discovery_payload(meter_id: str, base_topic: str, context: str | None = None) -> dict:
     """Generate HA discovery payload for the energy sensor.
 
     Args:
         meter_id: The 13-character meter ID (e.g., "33B1225950027")
         base_topic: The base topic for meter data (e.g., "kpm33b")
+        context: Optional location/function context (e.g., "building1/floor2")
 
     Returns:
         Discovery payload dict ready for JSON serialization
     """
+    if context:
+        state_topic = f"{base_topic}/{context}/{meter_id}/minutes"
+    else:
+        state_topic = f"{base_topic}/{meter_id}/minutes"
     return {
         "name": "Active Energy",
         "unique_id": f"kpm33b_{meter_id}_energy",
-        "state_topic": f"{base_topic}/{meter_id}/minutes",
+        "state_topic": state_topic,
         "device_class": "energy",
         "state_class": "total_increasing",
         "unit_of_measurement": "kWh",
@@ -91,7 +101,7 @@ def discovery_topic(meter_id: str, sensor_type: str) -> str:
     return f"{DISCOVERY_PREFIX}/sensor/kpm33b_{meter_id}/{sensor_type}/config"
 
 
-def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str) -> None:
+def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str, context: str | None = None) -> None:
     """Publish HA autodiscovery messages for a meter.
 
     Publishes discovery configs for both power and energy sensors.
@@ -101,10 +111,11 @@ def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str) -> No
         client: Connected MQTT client (to the central broker)
         meter_id: The 13-character meter ID
         base_topic: The base topic for meter data (e.g., "kpm33b")
+        context: Optional location/function context (e.g., "building1/floor2")
     """
     # Power sensor discovery
     power_topic = discovery_topic(meter_id, "power")
-    power_payload = json.dumps(make_power_discovery_payload(meter_id, base_topic))
+    power_payload = json.dumps(make_power_discovery_payload(meter_id, base_topic, context))
     result = client.publish(power_topic, power_payload, qos=1, retain=True)
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         logger.info("Published HA discovery for %s power sensor", meter_id)
@@ -113,7 +124,7 @@ def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str) -> No
 
     # Energy sensor discovery
     energy_topic = discovery_topic(meter_id, "energy")
-    energy_payload = json.dumps(make_energy_discovery_payload(meter_id, base_topic))
+    energy_payload = json.dumps(make_energy_discovery_payload(meter_id, base_topic, context))
     result = client.publish(energy_topic, energy_payload, qos=1, retain=True)
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         logger.info("Published HA discovery for %s energy sensor", meter_id)
