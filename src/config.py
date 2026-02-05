@@ -32,7 +32,6 @@ class CentralBrokerTopics(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    file: str = "/var/log/kpm33b_proxy.log"
 
     @field_validator("level")
     @classmethod
@@ -47,6 +46,7 @@ class LoggingConfig(BaseModel):
 class MeterConfig(BaseModel):
     upload_frequency_seconds: int
     upload_frequency_minutes: int
+    exclude_device_ids: list[str] | None = None
 
 
 class AppConfig(BaseModel):

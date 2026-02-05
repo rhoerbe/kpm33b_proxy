@@ -94,6 +94,12 @@ class MqttBridge:
             logger.error("Data validation error on topic %s: %s", topic, e)
             return
 
+        # Filter out excluded device IDs (e.g., fake devices)
+        excluded_devices = self.config.kpm33b_meters.exclude_device_ids
+        if excluded_devices and device_id in excluded_devices:
+            logger.debug("Ignoring message from excluded device %s", device_id)
+            return
+
         # Publish HA autodiscovery on first message from a new meter
         if device_id not in self.discovered_meters and device_id != "unknown":
             self.discovered_meters.add(device_id)

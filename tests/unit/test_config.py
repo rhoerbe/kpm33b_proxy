@@ -24,7 +24,7 @@ def valid_config_dict():
             "external_main_topic": "kpm33b",
             "status_topic": "kpm33b/status",
         },
-        "logging": {"level": "INFO", "file": "/tmp/test_kpm33b.log"},
+        "logging": {"level": "INFO"},
         "kpm33b_meters": {"upload_frequency_seconds": 5, "upload_frequency_minutes": 1},
     }
 
@@ -70,3 +70,18 @@ def test_app_config_direct(valid_config_dict):
     config = AppConfig(**valid_config_dict)
     assert config.logging.level == "INFO"
     assert config.central_broker.port == 1883
+
+
+def test_exclude_device_ids_optional(valid_config_dict):
+    """exclude_device_ids defaults to None when not specified."""
+    config = AppConfig(**valid_config_dict)
+    assert config.kpm33b_meters.exclude_device_ids is None
+
+
+def test_exclude_device_ids_with_values(tmp_path, valid_config_dict):
+    """exclude_device_ids can be set to a list of meter IDs to ignore."""
+    valid_config_dict["kpm33b_meters"]["exclude_device_ids"] = ["000000000000", "FFFFFFFFFFFF"]
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(valid_config_dict))
+    config = load_config(config_file)
+    assert config.kpm33b_meters.exclude_device_ids == ["000000000000", "FFFFFFFFFFFF"]

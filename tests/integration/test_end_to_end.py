@@ -40,7 +40,7 @@ def config(tmp_path):
             "external_main_topic": "kpm33b",
             "status_topic": "kpm33b/status",
         },
-        "logging": {"level": "DEBUG", "file": str(tmp_path / "test.log")},
+        "logging": {"level": "DEBUG"},
         "kpm33b_meters": {"upload_frequency_seconds": 5, "upload_frequency_minutes": 1},
     }
     return AppConfig(**cfg)

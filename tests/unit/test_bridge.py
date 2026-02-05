@@ -24,8 +24,32 @@ def config():
             "external_main_topic": "kpm33b",
             "status_topic": "kpm33b/status",
         },
-        logging={"level": "DEBUG", "file": "/tmp/test.log"},
+        logging={"level": "DEBUG"},
         kpm33b_meters={"upload_frequency_seconds": 5, "upload_frequency_minutes": 1},
+    )
+
+
+@pytest.fixture
+def config_with_exclusion():
+    return AppConfig(
+        internal_broker={"host": "localhost", "port": 11883},
+        central_broker={"host": "localhost", "port": 1883},
+        internal_broker_topics={
+            "meter_seconds_data": "MQTT_RT_DATA",
+            "meter_minutes_data": "MQTT_ENY_NOW",
+            "meter_settime": "MQTT_COMMOD_SET_",
+            "meter_settime_ack": "MQTT_COMMOD_SET_REP",
+        },
+        central_broker_topics={
+            "external_main_topic": "kpm33b",
+            "status_topic": "kpm33b/status",
+        },
+        logging={"level": "DEBUG"},
+        kpm33b_meters={
+            "upload_frequency_seconds": 5,
+            "upload_frequency_minutes": 1,
+            "exclude_device_ids": ["33BFAKE000000", "000000000000"],
+        },
     )
 
 
@@ -33,6 +57,13 @@ def config():
 def bridge(config):
     with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
         b = MqttBridge(config)
+    return b
+
+
+@pytest.fixture
+def bridge_with_exclusion(config_with_exclusion):
+    with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
+        b = MqttBridge(config_with_exclusion)
     return b
 
 
@@ -151,6 +182,48 @@ class TestOnInternalMessage:
         # First: 2 discovery + 1 data = 3; Second: only 1 data
         assert first_count == 3
         assert second_count == 4  # 3 + 1 more data publish
+
+
+class TestDeviceIdExclusion:
+    def _make_msg(self, topic: str, payload: dict) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    def test_excluded_device_ignored(self, bridge_with_exclusion):
+        """Messages from excluded devices are ignored."""
+        payload = {"id": "33BFAKE000000", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge_with_exclusion.central_client.publish = MagicMock()
+
+        bridge_with_exclusion._on_internal_message(None, None, msg)
+
+        bridge_with_exclusion.central_client.publish.assert_not_called()
+
+    def test_non_excluded_device_publishes(self, bridge_with_exclusion):
+        """Messages from devices not in the exclusion list are published."""
+        payload = {"id": "33B1225950027", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge_with_exclusion.central_client.publish = MagicMock()
+        bridge_with_exclusion.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge_with_exclusion._on_internal_message(None, None, msg)
+
+        # Should publish (discovery + data)
+        assert bridge_with_exclusion.central_client.publish.call_count >= 1
+
+    def test_no_exclusion_allows_all(self, bridge):
+        """When exclude_device_ids is None, all devices are allowed."""
+        payload = {"id": "33BFAKE000000", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge._on_internal_message(None, None, msg)
+
+        # Should publish even for "fake" device when no exclusion list
+        assert bridge.central_client.publish.call_count >= 1
 
 
 class TestStartStop:

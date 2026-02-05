@@ -13,7 +13,6 @@
 #   - Create system user 'kpm33b'
 #   - Install mosquitto package (apt-get)
 #   - Disable default mosquitto systemd service
-#   - Create /var/log/kpm33b_proxy.log with correct ownership
 #   - Copy systemd unit files to /etc/systemd/system/
 #   - Run systemctl daemon-reload, enable, start services
 #   - Set ownership of /opt/kpm33b_proxy to kpm33b:kpm33b
@@ -116,7 +115,6 @@ central_broker_topics:
 
 logging:
   level: "INFO"
-  file: "/var/log/kpm33b_proxy.log"
 
 kpm33b_meters:
   upload_frequency_seconds: 30
@@ -132,15 +130,6 @@ echo ""
 echo "--- Setting ownership of ${REPO_ROOT} ---"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${REPO_ROOT}"
 echo "Ownership set to ${SERVICE_USER}:${SERVICE_USER}."
-
-# ── Create log file with correct ownership (requires root) ─────────────────
-
-echo ""
-echo "--- Creating log file ---"
-touch /var/log/kpm33b_proxy.log
-chown "${SERVICE_USER}:${SERVICE_USER}" /var/log/kpm33b_proxy.log
-chmod 644 /var/log/kpm33b_proxy.log
-echo "/var/log/kpm33b_proxy.log created (owner: ${SERVICE_USER})."
 
 # ── Install systemd units (requires root) ──────────────────────────────────
 
@@ -192,7 +181,7 @@ if [[ ${FAILED} -eq 0 ]]; then
     echo "=== Deployment successful ==="
     echo ""
     echo "Services run as user: ${SERVICE_USER}"
-    echo "Log file: /var/log/kpm33b_proxy.log"
+    echo "View logs with: journalctl -u kpm33b-proxy"
 else
     echo "=== Deployment completed with errors — check service logs: ==="
     echo "  journalctl -u kpm33b-broker --no-pager -n 20"

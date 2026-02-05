@@ -26,12 +26,14 @@ central_broker_topics:
   external_main_topic: "kpm33b"   # Subtopics have the format <deviceid>/seconds and <deviceid>/minutes
   status_topic: "kpm33b/status"   # Topic to publish status updates for checkmk on the central_broker
 
-# Logging configuration
+# Logging configuration (logs to stdout for journalctl)
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  file: "/var/log/kpm33b_proxy.log"
 
 # Meter configuration
 kpm33b_meters:
   upload_frequency_seconds: 30    # valid values: 30, 60, 300, 600, 900, 1200, 1800, 3600
   upload_frequency_minutes: 1     # valid values: 1, 5, 10, 15, 20, 30, 60, 1440
+  # Ignore messages from fake/invalid device IDs
+  exclude_device_ids:
+    - "33B120000000"
