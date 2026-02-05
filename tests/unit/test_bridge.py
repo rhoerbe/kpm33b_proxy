@@ -68,10 +68,12 @@ class TestOnInternalMessage:
 
         bridge._on_internal_message(None, None, msg)
 
-        bridge.central_client.publish.assert_called_once()
-        call_args = bridge.central_client.publish.call_args
-        assert call_args.args[0] == "kpm33b/33B1225950027/seconds"
-        published = json.loads(call_args.args[1])
+        # First message triggers HA discovery (2 calls) + data publish (1 call)
+        assert bridge.central_client.publish.call_count == 3
+        # Data publish is the last call
+        data_call = bridge.central_client.publish.call_args_list[-1]
+        assert data_call.args[0] == "kpm33b/33B1225950027/seconds"
+        published = json.loads(data_call.args[1])
         assert published["active_power"] == 6.6905
 
     def test_eny_now_publishes_to_central(self, bridge):
@@ -85,9 +87,10 @@ class TestOnInternalMessage:
 
         bridge._on_internal_message(None, None, msg)
 
-        call_args = bridge.central_client.publish.call_args
-        assert call_args.args[0] == "kpm33b/33B1225950027/minutes"
-        published = json.loads(call_args.args[1])
+        # Data publish is the last call (discovery may also fire)
+        data_call = bridge.central_client.publish.call_args_list[-1]
+        assert data_call.args[0] == "kpm33b/33B1225950027/minutes"
+        published = json.loads(data_call.args[1])
         assert published["active_energy"] == 163.486
 
     def test_invalid_json_does_not_crash(self, bridge):
@@ -114,6 +117,40 @@ class TestOnInternalMessage:
         bridge._on_internal_message(None, None, msg)
 
         bridge.central_client.publish.assert_not_called()
+
+    def test_ha_discovery_published_on_first_message(self, bridge):
+        """HA autodiscovery messages should be published for new meters."""
+        payload = {"id": "33B1225950027", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge._on_internal_message(None, None, msg)
+
+        # Should publish 2 discovery configs + 1 data message
+        assert bridge.central_client.publish.call_count == 3
+        topics = [c.args[0] for c in bridge.central_client.publish.call_args_list]
+        assert "homeassistant/sensor/kpm33b_33B1225950027/power/config" in topics
+        assert "homeassistant/sensor/kpm33b_33B1225950027/energy/config" in topics
+
+    def test_ha_discovery_not_repeated(self, bridge):
+        """HA autodiscovery should only be published once per meter."""
+        payload = {"id": "33B1225950027", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        # First message — triggers discovery
+        bridge._on_internal_message(None, None, msg)
+        first_count = bridge.central_client.publish.call_count
+
+        # Second message — no discovery
+        bridge._on_internal_message(None, None, msg)
+        second_count = bridge.central_client.publish.call_count
+
+        # First: 2 discovery + 1 data = 3; Second: only 1 data
+        assert first_count == 3
+        assert second_count == 4  # 3 + 1 more data publish
 
 
 class TestStartStop:

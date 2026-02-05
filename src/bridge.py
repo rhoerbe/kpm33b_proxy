@@ -2,6 +2,7 @@
 
 Subscribes to internal broker topics, transforms messages,
 and publishes simplified data to the central broker.
+Also publishes Home Assistant autodiscovery messages for new meters.
 """
 
 import json
@@ -11,6 +12,7 @@ import time
 import paho.mqtt.client as mqtt
 
 from src.config import AppConfig
+from src.ha_discovery import publish_discovery
 from src.transform import IsendError, transform_eny_now, transform_rt_data
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ BACKOFF_MAX = 60
 class MqttBridge:
     def __init__(self, config: AppConfig):
         self.config = config
+        self.discovered_meters: set[str] = set()
         self._setup_internal_client()
         self._setup_central_client()
 
@@ -90,6 +93,12 @@ class MqttBridge:
         except IsendError as e:
             logger.error("Data validation error on topic %s: %s", topic, e)
             return
+
+        # Publish HA autodiscovery on first message from a new meter
+        if device_id not in self.discovered_meters and device_id != "unknown":
+            self.discovered_meters.add(device_id)
+            logger.info("New meter discovered: %s — publishing HA autodiscovery", device_id)
+            publish_discovery(self.central_client, device_id, main_topic)
 
         payload = json.dumps(transformed)
         result = self.central_client.publish(target_topic, payload, qos=1)
