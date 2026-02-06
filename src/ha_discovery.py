@@ -20,27 +20,39 @@ import paho.mqtt.client as mqtt
 logger = logging.getLogger(__name__)
 
 DISCOVERY_PREFIX = "homeassistant"
-MANUFACTURER = "Compere"
+MANUFACTURER = "compere-power.com"
 MODEL = "KPM33B"
 
 
-def _device_block(meter_id: str) -> dict:
-    """Generate the shared device block for a meter."""
+def _device_block(meter_id: str, friendly_name: str | None = None) -> dict:
+    """Generate the shared device block for a meter.
+
+    Args:
+        meter_id: The 13-character meter ID
+        friendly_name: Optional friendly name for the device (from device_contexts)
+    """
+    name = friendly_name if friendly_name else f"KPM33B {meter_id}"
     return {
         "identifiers": [f"kpm33b_{meter_id}"],
-        "name": f"KPM33B {meter_id}",
+        "name": name,
         "manufacturer": MANUFACTURER,
         "model": MODEL,
     }
 
 
-def make_power_discovery_payload(meter_id: str, base_topic: str, context: str | None = None) -> dict:
+def make_power_discovery_payload(
+    meter_id: str,
+    base_topic: str,
+    context: str | None = None,
+    upload_frequency: int = 30,
+) -> dict:
     """Generate HA discovery payload for the power sensor.
 
     Args:
         meter_id: The 13-character meter ID (e.g., "33B1225950027")
         base_topic: The base topic for meter data (e.g., "kpm33b")
-        context: Optional location/function context (e.g., "building1/floor2")
+        context: Optional context for topic hierarchy and device friendly name
+        upload_frequency: Upload interval in seconds (for expire_after calculation)
 
     Returns:
         Discovery payload dict ready for JSON serialization
@@ -57,17 +69,25 @@ def make_power_discovery_payload(meter_id: str, base_topic: str, context: str | 
         "state_class": "measurement",
         "unit_of_measurement": "kW",
         "value_template": "{{ value_json.active_power }}",
-        "device": _device_block(meter_id),
+        "suggested_display_precision": 0,
+        "expire_after": int(upload_frequency * 1.5),
+        "device": _device_block(meter_id, context),
     }
 
 
-def make_energy_discovery_payload(meter_id: str, base_topic: str, context: str | None = None) -> dict:
+def make_energy_discovery_payload(
+    meter_id: str,
+    base_topic: str,
+    context: str | None = None,
+    upload_frequency: int = 1,
+) -> dict:
     """Generate HA discovery payload for the energy sensor.
 
     Args:
         meter_id: The 13-character meter ID (e.g., "33B1225950027")
         base_topic: The base topic for meter data (e.g., "kpm33b")
-        context: Optional location/function context (e.g., "building1/floor2")
+        context: Optional context for topic hierarchy and device friendly name
+        upload_frequency: Upload interval in minutes (for expire_after calculation)
 
     Returns:
         Discovery payload dict ready for JSON serialization
@@ -84,7 +104,9 @@ def make_energy_discovery_payload(meter_id: str, base_topic: str, context: str |
         "state_class": "total_increasing",
         "unit_of_measurement": "kWh",
         "value_template": "{{ value_json.active_energy }}",
-        "device": _device_block(meter_id),
+        "suggested_display_precision": 0,
+        "expire_after": int(upload_frequency * 60 * 1.5),
+        "device": _device_block(meter_id, context),
     }
 
 
@@ -101,7 +123,14 @@ def discovery_topic(meter_id: str, sensor_type: str) -> str:
     return f"{DISCOVERY_PREFIX}/sensor/kpm33b_{meter_id}/{sensor_type}/config"
 
 
-def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str, context: str | None = None) -> None:
+def publish_discovery(
+    client: mqtt.Client,
+    meter_id: str,
+    base_topic: str,
+    context: str | None = None,
+    upload_freq_seconds: int = 30,
+    upload_freq_minutes: int = 1,
+) -> None:
     """Publish HA autodiscovery messages for a meter.
 
     Publishes discovery configs for both power and energy sensors.
@@ -111,11 +140,13 @@ def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str, conte
         client: Connected MQTT client (to the central broker)
         meter_id: The 13-character meter ID
         base_topic: The base topic for meter data (e.g., "kpm33b")
-        context: Optional location/function context (e.g., "building1/floor2")
+        context: Optional context for topic hierarchy and device friendly name
+        upload_freq_seconds: Upload interval for power data (seconds)
+        upload_freq_minutes: Upload interval for energy data (minutes)
     """
     # Power sensor discovery
     power_topic = discovery_topic(meter_id, "power")
-    power_payload = json.dumps(make_power_discovery_payload(meter_id, base_topic, context))
+    power_payload = json.dumps(make_power_discovery_payload(meter_id, base_topic, context, upload_freq_seconds))
     result = client.publish(power_topic, power_payload, qos=1, retain=True)
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         logger.info("Published HA discovery for %s power sensor", meter_id)
@@ -124,7 +155,7 @@ def publish_discovery(client: mqtt.Client, meter_id: str, base_topic: str, conte
 
     # Energy sensor discovery
     energy_topic = discovery_topic(meter_id, "energy")
-    energy_payload = json.dumps(make_energy_discovery_payload(meter_id, base_topic, context))
+    energy_payload = json.dumps(make_energy_discovery_payload(meter_id, base_topic, context, upload_freq_minutes))
     result = client.publish(energy_topic, energy_payload, qos=1, retain=True)
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         logger.info("Published HA discovery for %s energy sensor", meter_id)

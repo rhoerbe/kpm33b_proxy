@@ -122,7 +122,14 @@ class MqttBridge:
             self.discovered_meters.add(device_id)
             context = self._get_device_context(device_id)
             logger.info("New meter discovered: %s — publishing HA autodiscovery", device_id)
-            publish_discovery(self.central_client, device_id, main_topic, context)
+            publish_discovery(
+                self.central_client,
+                device_id,
+                main_topic,
+                context,
+                self.config.kpm33b_meters.upload_frequency_seconds,
+                self.config.kpm33b_meters.upload_frequency_minutes,
+            )
 
         payload = json.dumps(transformed)
         result = self.central_client.publish(target_topic, payload, qos=1)

@@ -179,3 +179,67 @@ class TestContextSupport:
         context = "campus/building1/floor2/room101"
         payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, context)
         assert payload["state_topic"] == f"{BASE_TOPIC}/{context}/{METER_ID}/seconds"
+
+    def test_context_used_as_device_name(self):
+        """Context should be used as the HA device friendly name."""
+        context = "Heatpump Power"
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, context)
+        assert payload["device"]["name"] == "Heatpump Power"
+
+    def test_no_context_uses_default_name(self):
+        """Without context, device name defaults to KPM33B + meter_id."""
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, None)
+        assert payload["device"]["name"] == f"KPM33B {METER_ID}"
+
+
+class TestDisplayPrecision:
+    """Tests for suggested_display_precision attribute."""
+
+    def test_power_precision_is_zero(self):
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC)
+        assert payload["suggested_display_precision"] == 0
+
+    def test_energy_precision_is_zero(self):
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC)
+        assert payload["suggested_display_precision"] == 0
+
+
+class TestExpireAfter:
+    """Tests for expire_after attribute (availability monitoring)."""
+
+    def test_power_expire_after_default(self):
+        """Power expire_after should be upload_frequency_seconds * 1.5."""
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC)
+        # Default is 30 seconds, so expire_after = 30 * 1.5 = 45
+        assert payload["expire_after"] == 45
+
+    def test_power_expire_after_custom_frequency(self):
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC, upload_frequency=60)
+        # 60 * 1.5 = 90
+        assert payload["expire_after"] == 90
+
+    def test_energy_expire_after_default(self):
+        """Energy expire_after should be upload_frequency_minutes * 60 * 1.5."""
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC)
+        # Default is 1 minute, so expire_after = 1 * 60 * 1.5 = 90
+        assert payload["expire_after"] == 90
+
+    def test_energy_expire_after_custom_frequency(self):
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC, upload_frequency=5)
+        # 5 * 60 * 1.5 = 450
+        assert payload["expire_after"] == 450
+
+
+class TestManufacturer:
+    """Tests for manufacturer string."""
+
+    def test_manufacturer_is_compere_power(self):
+        assert MANUFACTURER == "compere-power.com"
+
+    def test_power_device_has_correct_manufacturer(self):
+        payload = make_power_discovery_payload(METER_ID, BASE_TOPIC)
+        assert payload["device"]["manufacturer"] == "compere-power.com"
+
+    def test_energy_device_has_correct_manufacturer(self):
+        payload = make_energy_discovery_payload(METER_ID, BASE_TOPIC)
+        assert payload["device"]["manufacturer"] == "compere-power.com"

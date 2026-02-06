@@ -37,10 +37,10 @@ kpm33b_meters:
   # Ignore messages from fake/invalid device IDs
   exclude_device_ids:
     - "33B120000000"
-  # Optional: Add location/function context to MQTT topics per device
-  # Results in topics like: kpm33b/building1/floor2/33B1225950027/seconds
-  # Devices without context use: kpm33b/<device_id>/seconds
+  # Optional: Device context for MQTT topics AND Home Assistant device names
+  # - Used as hierarchical topic path: kpm33b/<context>/<device_id>/seconds
+  # - Used as HA device friendly name in the Home Assistant UI
+  # Devices without context use: kpm33b/<device_id>/seconds and "KPM33B <device_id>" as name
   # device_contexts:
-  #   "33B1225950027": "building1/floor2"
-  #   "33B1225950028": "building1/floor3"
-  #   "33B1225950029": "building2"
+  #   "33B1225950027": "Heatpump Power"
+  #   "33B1225950029": "Main Panel"
