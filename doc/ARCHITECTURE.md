@@ -72,7 +72,7 @@ The topic names are defined in config.yaml.
                                                              |                 |
                                                              +-----------------+
                                                                      |
-                                                                     | (4) Publish Simplified Data
+                                                                     | (4) Publish Simplified + Discovery Data
                                                                      v
                                                              +-----------------+
                                                              | Central Broker  |

@@ -10,4 +10,6 @@ The proxy features following functions:
 - Publish messages under a separate topic per device, and a common top-level topic
 - Creates MQTT Message Profile limiting data to active power and energy, import only. (no reactive/apparent measurements)
 - Provides an interface to configure the KPM33B device to set the upload frequency (second/minute) from a config file. 
-- Provides Home Assistant Auto-Discovery Messages (in topic /homeassitant/sensor/)
+- Provides Home Assistant Auto-Discovery Messages (in topic /homeassitant/sensor/). 
+  Discovery messages are retained at the MQTT broker and are triggered when a new device is discovered or the MQTT bridge is started.
+
