@@ -34,7 +34,7 @@ logging:
 kpm33b_meters:
   upload_frequency_seconds: 30    # valid values: 30, 60, 300, 600, 900, 1200, 1800, 3600
   upload_frequency_minutes: 1     # valid values: 1, 5, 10, 15, 20, 30, 60, 1440
-  # Ignore messages from fake/invalid device IDs
+  # Ignore messages from fake/unused device IDs
   exclude_device_ids:
     - "33B120000000"
   # Maximum number of messages to track for duplicate detection (key: device_id + timestamp)

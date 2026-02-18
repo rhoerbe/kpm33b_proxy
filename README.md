@@ -1,9 +1,15 @@
-## KPM33B Energy Meter Integration into EMA and Smart Home Systems (like Home Assistant)
+## KPM33B Energy Meter Integration into Home Assistant)
 
 This project delivers a MQTT "proxy" to read KPM33B meter data in a filtered and simplified format. 
 The KPM33B is an energy meter from Compere (https://comperepower.com).
 
-Motivation: The KPM33B publishes fairly complex JSON data at fixed root topics. 
+Motivation: The KPM33B publishes fairly complex JSON that is not easy to digest with Home Assistant:
+- Messages have fixed root topics.
+- Multiple meters share the same topic
+- No human-friendly names for parameters
+- Spurious messages with zero-values that need to be filtered
+- Configuration with raw MQTT messages.
+
 To simplify the integration into smarthome solutions the messages are restructured.  
 The proxy features following functions:
 - Work as a MQTT bridge
