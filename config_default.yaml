@@ -37,6 +37,9 @@ kpm33b_meters:
   # Ignore messages from fake/invalid device IDs
   exclude_device_ids:
     - "33B120000000"
+  # Maximum number of messages to track for duplicate detection (key: device_id + timestamp)
+  # Older entries are evicted when this limit is exceeded
+  duplicate_dict_max_length: 30
   # Optional: Device context for MQTT topics AND Home Assistant device names
   # - Used as hierarchical topic path: kpm33b/<context>/<device_id>/seconds
   # - Used as HA device friendly name in the Home Assistant UI

@@ -8,6 +8,7 @@ Also publishes Home Assistant autodiscovery messages for new meters.
 import json
 import logging
 import time
+from collections import OrderedDict
 
 import paho.mqtt.client as mqtt
 
@@ -17,6 +18,9 @@ from src.transform import IsendError, transform_eny_now, transform_rt_data
 
 logger = logging.getLogger(__name__)
 
+# Keys excluded from zero-value check (metadata fields)
+METADATA_KEYS = {"id", "time", "isend"}
+
 BACKOFF_BASE = 1
 BACKOFF_MAX = 60
 
@@ -25,6 +29,7 @@ class MqttBridge:
     def __init__(self, config: AppConfig):
         self.config = config
         self.discovered_meters: set[str] = set()
+        self._seen_messages: OrderedDict[str, bool] = OrderedDict()
         self._setup_internal_client()
         self._setup_central_client()
 
@@ -82,12 +87,59 @@ class MqttBridge:
             return f"{main_topic}/{context}/{device_id}"
         return f"{main_topic}/{device_id}"
 
+    def _is_zero_value_message(self, raw: dict) -> bool:
+        """Check if all data values (excluding metadata) are zero or empty.
+
+        Returns True if message should be dropped (all values are zero/empty).
+        """
+        for key, value in raw.items():
+            if key in METADATA_KEYS:
+                continue
+            if value is None or value == "" or value == 0 or value == 0.0 or value == "0":
+                continue
+            # Found a non-zero, non-empty value
+            return False
+        return True
+
+    def _is_duplicate_message(self, device_id: str, timestamp: str) -> bool:
+        """Check if a message with this device_id+timestamp has been seen before.
+
+        Returns True if duplicate (should be dropped), False if new (first occurrence).
+        Maintains an ordered dict bounded by duplicate_dict_max_length.
+        """
+        key = f"{device_id}_{timestamp}"
+        if key in self._seen_messages:
+            logger.debug("Duplicate message for %s at %s", device_id, timestamp)
+            return True
+
+        # Track this message
+        self._seen_messages[key] = True
+
+        # Evict oldest entries if over limit
+        max_length = self.config.kpm33b_meters.duplicate_dict_max_length
+        while len(self._seen_messages) > max_length:
+            self._seen_messages.popitem(last=False)
+
+        return False
+
     def _on_internal_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
         topic = msg.topic
         try:
             raw = json.loads(msg.payload)
         except json.JSONDecodeError:
             logger.error("Invalid JSON on topic %s: %s", topic, msg.payload[:200])
+            return
+
+        # Filter zero-value messages (KPM33B bug workaround)
+        if self._is_zero_value_message(raw):
+            device_id = raw.get("id", "unknown")
+            logger.debug("Ignoring zero-value message from device %s", device_id)
+            return
+
+        # Filter duplicate messages (same device_id + timestamp)
+        device_id = raw.get("id", "unknown")
+        timestamp = raw.get("time", "")
+        if self._is_duplicate_message(device_id, timestamp):
             return
 
         topics = self.config.internal_broker_topics

@@ -200,17 +200,19 @@ class TestOnInternalMessage:
 
     def test_ha_discovery_not_repeated(self, bridge):
         """HA autodiscovery should only be published once per meter."""
-        payload = {"id": "33B1225950027", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
-        msg = self._make_msg("MQTT_RT_DATA", payload)
+        payload1 = {"id": "33B1225950027", "time": "20260112163900", "zyggl": 6.0, "isend": "1"}
+        payload2 = {"id": "33B1225950027", "time": "20260112164000", "zyggl": 7.0, "isend": "1"}
+        msg1 = self._make_msg("MQTT_RT_DATA", payload1)
+        msg2 = self._make_msg("MQTT_RT_DATA", payload2)
         bridge.central_client.publish = MagicMock()
         bridge.central_client.publish.return_value = MagicMock(rc=0)
 
         # First message — triggers discovery
-        bridge._on_internal_message(None, None, msg)
+        bridge._on_internal_message(None, None, msg1)
         first_count = bridge.central_client.publish.call_count
 
-        # Second message — no discovery
-        bridge._on_internal_message(None, None, msg)
+        # Second message with different timestamp — no discovery
+        bridge._on_internal_message(None, None, msg2)
         second_count = bridge.central_client.publish.call_count
 
         # First: 2 discovery + 1 data = 3; Second: only 1 data
@@ -372,3 +374,184 @@ class TestStartStop:
         bridge.central_client.loop_stop.assert_called_once()
         bridge.internal_client.disconnect.assert_called_once()
         bridge.central_client.disconnect.assert_called_once()
+
+
+class TestZeroValueFiltering:
+    """Tests for zero-value message filtering (KPM33B bug workaround)."""
+
+    def _make_msg(self, topic: str, payload: dict) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    def test_zero_value_message_dropped(self, bridge):
+        """Message with all zero data values should be filtered out."""
+        payload = {"id": "33B1225950029", "time": "20260218103000", "zyggl": 0, "zygsz": 0.0, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+
+        bridge._on_internal_message(None, None, msg)
+
+        bridge.central_client.publish.assert_not_called()
+
+    def test_zero_value_string_dropped(self, bridge):
+        """Message with '0' string values should also be filtered."""
+        payload = {"id": "33B1225950029", "time": "20260218103000", "zyggl": "0", "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+
+        bridge._on_internal_message(None, None, msg)
+
+        bridge.central_client.publish.assert_not_called()
+
+    def test_empty_string_value_dropped(self, bridge):
+        """Message with empty string data values should be filtered."""
+        payload = {"id": "33B1225950029", "time": "20260218103000", "zyggl": "", "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+
+        bridge._on_internal_message(None, None, msg)
+
+        bridge.central_client.publish.assert_not_called()
+
+    def test_none_value_dropped(self, bridge):
+        """Message with None data values should be filtered."""
+        payload = {"id": "33B1225950029", "time": "20260218103000", "zyggl": None, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+
+        bridge._on_internal_message(None, None, msg)
+
+        bridge.central_client.publish.assert_not_called()
+
+    def test_nonzero_value_passes(self, bridge):
+        """Message with non-zero data value should be published."""
+        payload = {"id": "33B1225950027", "time": "20260218103000", "zyggl": 6.6905, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge._on_internal_message(None, None, msg)
+
+        # Should publish (discovery + data)
+        assert bridge.central_client.publish.call_count >= 1
+
+    def test_only_metadata_values_still_filtered(self, bridge):
+        """Message with only id, time, isend (no data keys) should be filtered."""
+        payload = {"id": "33B1225950029", "time": "20260218103000", "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+
+        bridge._on_internal_message(None, None, msg)
+
+        bridge.central_client.publish.assert_not_called()
+
+    def test_is_zero_value_message_true_for_all_zeros(self, bridge):
+        """_is_zero_value_message returns True when all data values are zero."""
+        raw = {"id": "33B1225950029", "time": "20260218103000", "zyggl": 0, "zygsz": 0.0, "isend": "1"}
+        assert bridge._is_zero_value_message(raw) is True
+
+    def test_is_zero_value_message_false_for_nonzero(self, bridge):
+        """_is_zero_value_message returns False when a data value is non-zero."""
+        raw = {"id": "33B1225950029", "time": "20260218103000", "zyggl": 5.5, "isend": "1"}
+        assert bridge._is_zero_value_message(raw) is False
+
+
+class TestDuplicateFiltering:
+    """Tests for duplicate message filtering."""
+
+    def _make_msg(self, topic: str, payload: dict) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    def test_duplicate_message_dropped(self, bridge):
+        """Second message with same id+timestamp should be filtered."""
+        payload = {"id": "33B1225950028", "time": "20260218103000", "zyggl": 53.828, "isend": "1"}
+        msg = self._make_msg("MQTT_RT_DATA", payload)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        # First message
+        bridge._on_internal_message(None, None, msg)
+        first_count = bridge.central_client.publish.call_count
+
+        # Second identical message (duplicate)
+        bridge._on_internal_message(None, None, msg)
+        second_count = bridge.central_client.publish.call_count
+
+        assert first_count >= 1  # First message published
+        assert second_count == first_count  # Duplicate filtered
+
+    def test_different_timestamp_passes(self, bridge):
+        """Messages with same id but different timestamps should both pass."""
+        payload1 = {"id": "33B1225950028", "time": "20260218103000", "zyggl": 53.828, "isend": "1"}
+        payload2 = {"id": "33B1225950028", "time": "20260218103100", "zyggl": 54.0, "isend": "1"}
+        msg1 = self._make_msg("MQTT_RT_DATA", payload1)
+        msg2 = self._make_msg("MQTT_RT_DATA", payload2)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge._on_internal_message(None, None, msg1)
+        first_count = bridge.central_client.publish.call_count
+
+        bridge._on_internal_message(None, None, msg2)
+        second_count = bridge.central_client.publish.call_count
+
+        # Second message has different timestamp, so it should be published
+        assert second_count > first_count
+
+    def test_different_device_id_passes(self, bridge):
+        """Messages with same timestamp but different device IDs should both pass."""
+        payload1 = {"id": "33B1225950027", "time": "20260218103000", "zyggl": 10.0, "isend": "1"}
+        payload2 = {"id": "33B1225950028", "time": "20260218103000", "zyggl": 20.0, "isend": "1"}
+        msg1 = self._make_msg("MQTT_RT_DATA", payload1)
+        msg2 = self._make_msg("MQTT_RT_DATA", payload2)
+        bridge.central_client.publish = MagicMock()
+        bridge.central_client.publish.return_value = MagicMock(rc=0)
+
+        bridge._on_internal_message(None, None, msg1)
+        first_count = bridge.central_client.publish.call_count
+
+        bridge._on_internal_message(None, None, msg2)
+        second_count = bridge.central_client.publish.call_count
+
+        # Second message has different device ID, so it should be published
+        assert second_count > first_count
+
+    def test_is_duplicate_returns_true_for_seen(self, bridge):
+        """_is_duplicate_message returns True for previously seen id+timestamp."""
+        bridge._is_duplicate_message("33B1225950028", "20260218103000")
+        assert bridge._is_duplicate_message("33B1225950028", "20260218103000") is True
+
+    def test_is_duplicate_returns_false_for_new(self, bridge):
+        """_is_duplicate_message returns False for new id+timestamp."""
+        assert bridge._is_duplicate_message("33B1225950028", "20260218103000") is False
+
+    def test_seen_messages_dict_bounded(self, bridge):
+        """_seen_messages dict should not exceed duplicate_dict_max_length."""
+        max_length = bridge.config.kpm33b_meters.duplicate_dict_max_length
+        # Add more messages than the limit
+        for i in range(max_length + 10):
+            bridge._is_duplicate_message(f"33B12259500{i:02d}", f"202602181030{i:02d}")
+
+        assert len(bridge._seen_messages) <= max_length
+
+    def test_oldest_entries_evicted_first(self, bridge):
+        """Oldest entries should be evicted when limit exceeded."""
+        bridge.config.kpm33b_meters.duplicate_dict_max_length = 5
+        bridge._seen_messages.clear()
+
+        # Add 5 messages
+        for i in range(5):
+            bridge._is_duplicate_message(f"DEV{i}", f"TIME{i}")
+
+        # Add one more
+        bridge._is_duplicate_message("DEV5", "TIME5")
+
+        # First entry should be evicted
+        assert "DEV0_TIME0" not in bridge._seen_messages
+        # Last entry should remain
+        assert "DEV5_TIME5" in bridge._seen_messages

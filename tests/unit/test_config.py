@@ -117,3 +117,18 @@ def test_device_contexts_with_nested_path(tmp_path, valid_config_dict):
     config_file.write_text(yaml.dump(valid_config_dict))
     config = load_config(config_file)
     assert config.kpm33b_meters.device_contexts["33B1225950027"] == "campus/building1/floor2/room101"
+
+
+def test_duplicate_dict_max_length_default(valid_config_dict):
+    """duplicate_dict_max_length defaults to 30 when not specified."""
+    config = AppConfig(**valid_config_dict)
+    assert config.kpm33b_meters.duplicate_dict_max_length == 30
+
+
+def test_duplicate_dict_max_length_custom(tmp_path, valid_config_dict):
+    """duplicate_dict_max_length can be set to a custom value."""
+    valid_config_dict["kpm33b_meters"]["duplicate_dict_max_length"] = 100
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(valid_config_dict))
+    config = load_config(config_file)
+    assert config.kpm33b_meters.duplicate_dict_max_length == 100

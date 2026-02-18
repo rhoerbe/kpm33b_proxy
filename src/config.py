@@ -48,6 +48,7 @@ class MeterConfig(BaseModel):
     upload_frequency_minutes: int
     exclude_device_ids: list[str] | None = None
     device_contexts: dict[str, str] | None = None
+    duplicate_dict_max_length: int = 30
 
 
 class AppConfig(BaseModel):
