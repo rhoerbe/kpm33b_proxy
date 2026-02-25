@@ -3,11 +3,9 @@
 #
 # Usage:
 #   cd /opt/kpm33b_proxy
-#   sudo MQTTPW="<password>" ./scripts/deploy.sh
-#
-# Or interactively (prompts for password):
-#   cd /opt/kpm33b_proxy
 #   sudo ./scripts/deploy.sh
+#
+# Post-deploy: Edit config.yaml to set central_broker credentials and other settings.
 #
 # Activities requiring root:
 #   - Create system user 'kpm33b'
@@ -32,17 +30,6 @@ fi
 
 if [[ ! -f "${REPO_ROOT}/src/config.py" ]]; then
     echo "ERROR: Must be run from the repository root (expected ${REPO_ROOT}/src/config.py)." >&2
-    exit 1
-fi
-
-# Get MQTT password from environment or prompt
-if [[ -z "${MQTTPW:-}" ]]; then
-    read -r -s -p "Enter MQTT password for central broker: " MQTTPW
-    echo
-fi
-
-if [[ -z "${MQTTPW}" ]]; then
-    echo "ERROR: MQTT password must not be empty." >&2
     exit 1
 fi
 
