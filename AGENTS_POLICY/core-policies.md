@@ -1,8 +1,5 @@
 # Core Policies
 
-## Directory Structure and Paths
-- Direct
-
 ## Version Control
 - By default, all files need to be version-managed by git, except:
   - Secrets (such as tokens, passwords, keys, seeds)
@@ -29,6 +26,8 @@
 - **Authentication**: All access must be properly authenticated
 - **Container Security**: Use security-hardened container configurations
 - **Access Control**: Proper file permissions and user management
+- **Least Privilege**: Propose restriction and isolation where feasible,
+  such as non-root service users, read-only access, granular network filters and file access privileges.
 
 ## Git Workflow  
 - Files managed with git must not bypass github for file transfers (e.g., no scp)
