@@ -5,9 +5,9 @@ decodes them, maps device IDs to friendly sensor names, and publishes structured
 back to the central broker. Also manages Home Assistant autodiscovery and RfRaw mode
 resilience via the Tasmota HTTP API.
 
-Unlike kpm33b_proxy (which has a dedicated internal broker), the RF bridge uses the
-central broker for both input and output — Tasmota devices publish directly there.
-An optional `rfbridge_input_broker` config section overrides the input broker if needed.
+Tasmota publishes to the internal broker (same as kpm33b_proxy); decoded data is
+forwarded to the central broker. An optional `rfbridge_input_broker` config section
+overrides the subscription broker if the Tasmota device is configured differently.
 """
 
 import json
@@ -33,8 +33,8 @@ class RfBridgeConfig:
     """Configuration holder for the RF bridge proxy."""
 
     def __init__(self, cfg: dict):
-        # Tasmota publishes to the central broker; use rfbridge_input_broker only if explicitly set
-        broker = cfg.get("rfbridge_input_broker") or cfg["central_broker"]
+        # Tasmota publishes to the internal broker; use rfbridge_input_broker to override if needed
+        broker = cfg.get("rfbridge_input_broker") or cfg["internal_broker"]
         self.internal_host: str = broker["host"]
         self.internal_port: int = broker["port"]
         self.internal_username: str | None = broker.get("username")

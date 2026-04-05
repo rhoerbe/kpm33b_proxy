@@ -89,13 +89,13 @@ def publish_discovery(
 ) -> None:
     """Publish HA autodiscovery messages for one RF sensor (temperature, humidity, battery_low)."""
     entities = [
-        (discovery_topic(friendly_name, "temperature"), make_temperature_discovery_payload(friendly_name, output_topic_prefix)),
-        (discovery_topic(friendly_name, "humidity"), make_humidity_discovery_payload(friendly_name, output_topic_prefix)),
-        (discovery_topic(friendly_name, "battery_low"), make_battery_low_discovery_payload(friendly_name, output_topic_prefix)),
+        ("temperature", discovery_topic(friendly_name, "temperature"), make_temperature_discovery_payload(friendly_name, output_topic_prefix)),
+        ("humidity", discovery_topic(friendly_name, "humidity"), make_humidity_discovery_payload(friendly_name, output_topic_prefix)),
+        ("battery_low", discovery_topic(friendly_name, "battery_low"), make_battery_low_discovery_payload(friendly_name, output_topic_prefix)),
     ]
-    for topic, payload in entities:
+    for entity_type, topic, payload in entities:
         result = client.publish(topic, json.dumps(payload), qos=1, retain=True)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info("Published HA discovery for %s/%s", friendly_name, topic.split("_")[-2])
+            logger.info("Published HA discovery for %s/%s", friendly_name, entity_type)
         else:
-            logger.error("Failed HA discovery publish for %s: rc=%d", topic, result.rc)
+            logger.error("Failed HA discovery publish for %s/%s: rc=%d", friendly_name, entity_type, result.rc)
