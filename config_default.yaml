@@ -64,8 +64,3 @@ kpm33b_meters:
   # device_contexts:
   #   "33B1225950027": "Heatpump Power"
   #   "33B1225950029": "Main Panel"
-
-
-# Tasmota Bridge configuration
-tasmota_bridge_topics:
-  input_topic: tele/433rfbridge/RESULT     # the topic is kept from input to output
