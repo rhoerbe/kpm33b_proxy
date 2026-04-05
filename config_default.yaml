@@ -33,7 +33,7 @@ logging:
 # 433 MHz RF Bridge Topics (Tasmota + Portisch)
 tasmota_bridge_topics:
   input_topic: "tele/433rfbridge/RESULT"
-  discovery_topic: "tele/433rfbridge/discovery"
+  discovery_topic: "tasmota/discovery/433rfbridge"
   output_topic_prefix: "tele/433rfbridge"
 
 # RF Bridge Proxy settings
