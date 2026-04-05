@@ -1,8 +1,13 @@
 """MQTT bridge for Sonoff RF Bridge R2 / Portisch / Tasmota proxy.
 
-Subscribes to the internal broker for raw AA B1 RF frames from a Tasmota RF bridge,
+Subscribes to the central broker for raw AA B1 RF frames published by Tasmota,
 decodes them, maps device IDs to friendly sensor names, and publishes structured JSON
-to the central broker. Also manages Home Assistant autodiscovery and RfRaw mode resilience.
+back to the central broker. Also manages Home Assistant autodiscovery and RfRaw mode
+resilience via the Tasmota HTTP API.
+
+Unlike kpm33b_proxy (which has a dedicated internal broker), the RF bridge uses the
+central broker for both input and output — Tasmota devices publish directly there.
+An optional `rfbridge_input_broker` config section overrides the input broker if needed.
 """
 
 import json
@@ -28,7 +33,8 @@ class RfBridgeConfig:
     """Configuration holder for the RF bridge proxy."""
 
     def __init__(self, cfg: dict):
-        broker = cfg["internal_broker"]
+        # Tasmota publishes to the central broker; use rfbridge_input_broker only if explicitly set
+        broker = cfg.get("rfbridge_input_broker") or cfg["central_broker"]
         self.internal_host: str = broker["host"]
         self.internal_port: int = broker["port"]
         self.internal_username: str | None = broker.get("username")

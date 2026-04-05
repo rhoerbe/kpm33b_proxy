@@ -28,6 +28,8 @@ def _extract_rfraw_entries(log_path: Path) -> list[tuple[int, str]]:
 @pytest.fixture(scope="module")
 def decoded_frames():
     """Parse the full log file; return list of (lineno, frame_or_None)."""
+    if not LOG_PATH.exists():
+        pytest.skip(f"Test log file not present: {LOG_PATH}")
     entries = _extract_rfraw_entries(LOG_PATH)
     return [(lineno, parse_rfraw_payload(raw)) for lineno, raw in entries]
 
