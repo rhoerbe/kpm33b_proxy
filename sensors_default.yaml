@@ -1,0 +1,21 @@
+# RF Sensor Configuration for 433rfbridge_proxy
+# ----------------------------------------------
+# Map physical sensors to friendly names using the stable key (protocol, channel).
+#
+# protocol:      Timing fingerprint family. Use "nexus_compatible" or "auto" to accept any.
+# channel:       Physical channel switch position on the sensor (1, 2, or 3).
+# last_seen_id:  Auto-maintained rolling device ID (informational; updated on battery swap).
+#
+# The proxy updates last_seen_id automatically — no manual migration required.
+# Copy this file to sensors.yaml and configure your sensors.
+
+sensors:
+  living_room:
+    protocol: "nexus_compatible"
+    channel: 1
+    last_seen_id: null    # populated on first reception
+
+  bedroom:
+    protocol: "nexus_compatible"
+    channel: 2
+    last_seen_id: null

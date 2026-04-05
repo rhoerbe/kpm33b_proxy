@@ -30,6 +30,23 @@ central_broker_topics:
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+# 433 MHz RF Bridge Topics (Tasmota + Portisch)
+tasmota_bridge_topics:
+  input_topic: "tele/433rfbridge/RESULT"
+  discovery_topic: "tele/433rfbridge/discovery"
+  output_topic_prefix: "tele/433rfbridge"
+
+# RF Bridge Proxy settings
+rfbridge_proxy:
+  sensor_timeout_seconds: 3600       # seconds before sensor is considered dead
+  migration_window_seconds: 900      # max seconds after death to auto-migrate on new ID
+  dedup_window_seconds: 30           # suppress duplicate bursts within this window
+  outlier_temp_delta: 10.0           # °C — reject readings deviating more than this
+  tasmota_http_host: ""              # IP/hostname of Tasmota bridge; leave empty to disable RfRaw resilience
+  tasmota_http_port: 80
+  rfraw_mode: 177                    # Portisch bucket-raw mode
+  rfraw_check_interval_seconds: 300  # re-issue RfRaw command if silent for this long
+
 # Meter configuration
 kpm33b_meters:
   upload_frequency_seconds: 30    # valid values: 30, 60, 300, 600, 900, 1200, 1800, 3600

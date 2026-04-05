@@ -1,0 +1,17 @@
+[Unit]
+Description=433 MHz RF Bridge MQTT Proxy (Portisch/Tasmota AA B1 Decoder)
+After=network-online.target kpm33b-broker.service
+Wants=network-online.target
+Requires=kpm33b-broker.service
+
+[Service]
+Type=simple
+User=kpm33b
+Group=kpm33b
+WorkingDirectory=/opt/kpm33b_proxy
+ExecStart=/opt/kpm33b_proxy/venv/bin/python /opt/kpm33b_proxy/433rfbridge_proxy.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
