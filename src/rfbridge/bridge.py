@@ -75,6 +75,9 @@ class RfBridgeMqttBridge:
         self._discovered_sensors: set[str] = set()
         self._previously_published_names: set[str] = set(self._registry._sensors)
         self._last_message_time: float = 0.0
+        # Cache of retained tasmota/discovery/# messages received from the internal broker.
+        # Re-published to the central broker on every central connect (mirrors HA discovery logic).
+        self._tasmota_discovery_cache: dict[str, bytes] = {}  # topic → raw payload
         self._setup_internal_client()
         self._setup_central_client()
 
@@ -101,7 +104,8 @@ class RfBridgeMqttBridge:
             return
         logger.info("Connected to internal broker")
         client.subscribe(self.config.input_topic)
-        logger.info("Subscribed to %s", self.config.input_topic)
+        client.subscribe("tasmota/discovery/#")
+        logger.info("Subscribed to %s and tasmota/discovery/#", self.config.input_topic)
 
     def _on_internal_disconnect(self, client: mqtt.Client, userdata, rc: int) -> None:
         if rc != 0:
@@ -113,6 +117,7 @@ class RfBridgeMqttBridge:
             return
         logger.info("Connected to central broker")
         self._publish_startup_discovery()
+        self._forward_tasmota_discovery_cache()
 
     def _on_central_disconnect(self, client: mqtt.Client, userdata, rc: int) -> None:
         if rc != 0:
@@ -121,6 +126,10 @@ class RfBridgeMqttBridge:
     # ── Message handling ────────────────────────────────────────────────────────
 
     def _on_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
+        if msg.topic.startswith("tasmota/discovery/"):
+            self._forward_tasmota_discovery(msg)
+            return
+
         self._last_message_time = time.time()
         try:
             payload = json.loads(msg.payload)
@@ -147,6 +156,26 @@ class RfBridgeMqttBridge:
             return
 
         self._route_frame(frame)
+
+    def _forward_tasmota_discovery(self, msg: mqtt.MQTTMessage) -> None:
+        """Cache and forward a single Tasmota discovery message to the central broker."""
+        self._tasmota_discovery_cache[msg.topic] = bytes(msg.payload)
+        result = self._central.publish(msg.topic, msg.payload, qos=1, retain=True)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.debug("Forwarded %s to central broker", msg.topic)
+        else:
+            logger.error("Failed to forward %s: rc=%d", msg.topic, result.rc)
+
+    def _forward_tasmota_discovery_cache(self) -> None:
+        """Re-publish all cached Tasmota discovery messages to the central broker.
+
+        Called on every central broker connect so retained messages are restored
+        after a central broker restart or manual deletion.
+        """
+        for topic, payload in self._tasmota_discovery_cache.items():
+            self._central.publish(topic, payload, qos=1, retain=True)
+        if self._tasmota_discovery_cache:
+            logger.info("Forwarded %d Tasmota discovery entries to central broker", len(self._tasmota_discovery_cache))
 
     def _route_frame(self, frame: DecodedFrame) -> None:
         """Look up sensor name and publish decoded state, or route to discovery."""
