@@ -56,13 +56,18 @@ class TestDiscoveryTopic:
         topic = discovery_topic(SENSOR_NAME, "humidity")
         assert topic == f"homeassistant/sensor/433rfbridge_{SENSOR_NAME}_humidity/config"
 
+    def test_battery_low_uses_binary_sensor_component(self):
+        topic = discovery_topic(SENSOR_NAME, "battery_low")
+        assert topic == f"homeassistant/binary_sensor/433rfbridge_{SENSOR_NAME}_battery_low/config"
+
 
 class TestPublishDiscovery:
     def test_publishes_three_entities(self):
+        # 3 entity payloads + 1 stale-clear for old sensor/battery_low topic
         client = MagicMock()
         client.publish.return_value = MagicMock(rc=mqtt.MQTT_ERR_SUCCESS)
         publish_discovery(client, SENSOR_NAME, OUTPUT_PREFIX)
-        assert client.publish.call_count == 3
+        assert client.publish.call_count == 4
 
     def test_publishes_with_retain(self):
         client = MagicMock()

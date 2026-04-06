@@ -6,7 +6,7 @@ per sensor defined in sensors.yaml.
 Discovery topics:
   homeassistant/sensor/433rfbridge_<friendly_name>_temperature/config
   homeassistant/sensor/433rfbridge_<friendly_name>_humidity/config
-  homeassistant/sensor/433rfbridge_<friendly_name>_battery_low/config
+  homeassistant/binary_sensor/433rfbridge_<friendly_name>_battery_low/config
 
 State topics:
   tele/433rfbridge/<friendly_name>/state
@@ -65,6 +65,7 @@ def make_humidity_discovery_payload(friendly_name: str, output_topic_prefix: str
 
 
 def make_battery_low_discovery_payload(friendly_name: str, output_topic_prefix: str) -> dict:
+    """Binary sensor — device_class 'battery' expects ON=low, OFF=OK."""
     return {
         "name": "Battery Low",
         "unique_id": f"433rfbridge_{friendly_name}_battery_low",
@@ -79,7 +80,8 @@ def make_battery_low_discovery_payload(friendly_name: str, output_topic_prefix: 
 
 
 def discovery_topic(friendly_name: str, sensor_type: str) -> str:
-    return f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{friendly_name}_{sensor_type}/config"
+    component = "binary_sensor" if sensor_type == "battery_low" else "sensor"
+    return f"{DISCOVERY_PREFIX}/{component}/433rfbridge_{friendly_name}_{sensor_type}/config"
 
 
 def publish_discovery(
@@ -87,7 +89,15 @@ def publish_discovery(
     friendly_name: str,
     output_topic_prefix: str,
 ) -> None:
-    """Publish HA autodiscovery messages for one RF sensor (temperature, humidity, battery_low)."""
+    """Publish HA autodiscovery messages for one RF sensor (temperature, humidity, battery_low).
+
+    battery_low is published under homeassistant/binary_sensor/; any stale entry under
+    homeassistant/sensor/ is cleared with an empty retained payload.
+    """
+    # Clear stale sensor-component entry for battery_low (published before binary_sensor fix)
+    stale_topic = f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{friendly_name}_battery_low/config"
+    client.publish(stale_topic, b"", qos=1, retain=True)
+
     entities = [
         ("temperature", discovery_topic(friendly_name, "temperature"), make_temperature_discovery_payload(friendly_name, output_topic_prefix)),
         ("humidity", discovery_topic(friendly_name, "humidity"), make_humidity_discovery_payload(friendly_name, output_topic_prefix)),
