@@ -162,7 +162,7 @@ class RfBridgeMqttBridge:
         self._tasmota_discovery_cache[msg.topic] = bytes(msg.payload)
         result = self._central.publish(msg.topic, msg.payload, qos=1, retain=True)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.debug("Forwarded %s to central broker", msg.topic)
+            logger.info("Forwarded %s to central broker", msg.topic)
         else:
             logger.error("Failed to forward %s: rc=%d", msg.topic, result.rc)
 
