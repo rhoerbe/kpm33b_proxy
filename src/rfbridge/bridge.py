@@ -19,7 +19,7 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
-from src.rfbridge.ha_discovery import publish_discovery
+from src.rfbridge.ha_discovery import clear_discovery, publish_discovery
 from src.rfbridge.protocol import DecodedFrame, parse_rfraw_payload
 from src.rfbridge.sensor_registry import DeadSensorRegistry, Deduplicator, SensorRegistry
 
@@ -73,6 +73,7 @@ class RfBridgeMqttBridge:
         self._dead_registry = DeadSensorRegistry(config.migration_window_seconds)
         self._dedup = Deduplicator(config.dedup_window_seconds, config.outlier_temp_delta)
         self._discovered_sensors: set[str] = set()
+        self._previously_published_names: set[str] = set(self._registry._sensors)
         self._last_message_time: float = 0.0
         self._setup_internal_client()
         self._setup_central_client()
@@ -172,7 +173,8 @@ class RfBridgeMqttBridge:
 
         if friendly_name not in self._discovered_sensors:
             self._discovered_sensors.add(friendly_name)
-            publish_discovery(self._central, friendly_name, self.config.output_topic_prefix)
+            cfg = self._registry._sensors[friendly_name]
+            publish_discovery(self._central, friendly_name, cfg["protocol"], cfg["channel"], self.config.output_topic_prefix)
 
         self._publish_state(friendly_name, frame)
 
@@ -211,11 +213,24 @@ class RfBridgeMqttBridge:
             )
 
     def _publish_startup_discovery(self) -> None:
-        """Publish HA autodiscovery for all configured sensors on startup."""
-        sensors = self._registry._sensors
-        for friendly_name in sensors:
-            publish_discovery(self._central, friendly_name, self.config.output_topic_prefix)
+        """Publish HA autodiscovery for all configured sensors on startup.
+
+        Clears retained discovery topics for any names that were previously published
+        but are no longer in sensors.yaml (handles renames and removals).
+        """
+        current_names = set(self._registry._sensors)
+        for stale_name in self._previously_published_names - current_names:
+            logger.info("Sensor '%s' removed/renamed — clearing stale HA discovery", stale_name)
+            clear_discovery(self._central, stale_name)
+
+        for friendly_name, cfg in self._registry._sensors.items():
+            publish_discovery(
+                self._central, friendly_name, cfg["protocol"], cfg["channel"],
+                self.config.output_topic_prefix,
+            )
             self._discovered_sensors.add(friendly_name)
+
+        self._previously_published_names = current_names
 
     def _notify_migration(self, friendly_name: str, new_id: str) -> None:
         """Notify Home Assistant of an auto-migrated sensor via MQTT."""

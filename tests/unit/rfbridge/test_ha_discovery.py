@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import paho.mqtt.client as mqtt
 
 from src.rfbridge.ha_discovery import (
+    clear_discovery,
     discovery_topic,
     make_battery_low_discovery_payload,
     make_humidity_discovery_payload,
@@ -14,37 +15,49 @@ from src.rfbridge.ha_discovery import (
 
 OUTPUT_PREFIX = "tele/433rfbridge"
 SENSOR_NAME = "living_room"
+PROTOCOL = "nexus_compatible"
+CHANNEL = 1
 STATE_TOPIC = f"{OUTPUT_PREFIX}/{SENSOR_NAME}/state"
+STABLE_ID = f"433rfbridge_{PROTOCOL}_ch{CHANNEL}"
 
 
 class TestDiscoveryPayloads:
     def test_temperature_state_topic(self):
-        payload = make_temperature_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
+        payload = make_temperature_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert payload["state_topic"] == STATE_TOPIC
 
-    def test_temperature_unique_id(self):
-        payload = make_temperature_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
-        assert payload["unique_id"] == "433rfbridge_living_room_temperature"
+    def test_temperature_unique_id_is_stable(self):
+        # unique_id must NOT contain the friendly name — it must survive renames
+        payload = make_temperature_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        assert payload["unique_id"] == f"{STABLE_ID}_temperature"
+        assert SENSOR_NAME not in payload["unique_id"]
 
     def test_temperature_device_class(self):
-        payload = make_temperature_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
+        payload = make_temperature_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert payload["device_class"] == "temperature"
 
     def test_humidity_unit(self):
-        payload = make_humidity_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
+        payload = make_humidity_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert payload["unit_of_measurement"] == "%"
 
     def test_battery_low_device_class(self):
-        payload = make_battery_low_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
+        payload = make_battery_low_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert payload["device_class"] == "battery"
 
     def test_battery_low_value_template(self):
-        payload = make_battery_low_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
+        payload = make_battery_low_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert "battery_low" in payload["value_template"]
 
-    def test_device_block_identifiers(self):
-        payload = make_temperature_discovery_payload(SENSOR_NAME, OUTPUT_PREFIX)
-        assert f"433rfbridge_{SENSOR_NAME}" in payload["device"]["identifiers"]
+    def test_device_block_uses_stable_identifier(self):
+        payload = make_temperature_discovery_payload(SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        assert STABLE_ID in payload["device"]["identifiers"]
+        assert SENSOR_NAME not in payload["device"]["identifiers"]
+
+    def test_rename_changes_state_topic_not_unique_id(self):
+        p1 = make_temperature_discovery_payload("living_room", PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        p2 = make_temperature_discovery_payload("wohnzimmer", PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        assert p1["unique_id"] == p2["unique_id"]
+        assert p1["state_topic"] != p2["state_topic"]
 
 
 class TestDiscoveryTopic:
@@ -66,12 +79,24 @@ class TestPublishDiscovery:
         # 3 entity payloads + 1 stale-clear for old sensor/battery_low topic
         client = MagicMock()
         client.publish.return_value = MagicMock(rc=mqtt.MQTT_ERR_SUCCESS)
-        publish_discovery(client, SENSOR_NAME, OUTPUT_PREFIX)
+        publish_discovery(client, SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
         assert client.publish.call_count == 4
 
     def test_publishes_with_retain(self):
         client = MagicMock()
         client.publish.return_value = MagicMock(rc=mqtt.MQTT_ERR_SUCCESS)
-        publish_discovery(client, SENSOR_NAME, OUTPUT_PREFIX)
-        for call in client.publish.call_args_list:
-            assert call.kwargs.get("retain") is True or (len(call.args) >= 4 and call.args[3] is True)
+        publish_discovery(client, SENSOR_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        for c in client.publish.call_args_list:
+            assert c.kwargs.get("retain") is True
+
+
+class TestClearDiscovery:
+    def test_clears_all_three_entity_topics(self):
+        client = MagicMock()
+        client.publish.return_value = MagicMock(rc=mqtt.MQTT_ERR_SUCCESS)
+        clear_discovery(client, SENSOR_NAME)
+        assert client.publish.call_count == 3
+        topics = [c.args[0] for c in client.publish.call_args_list]
+        assert any("temperature" in t for t in topics)
+        assert any("humidity" in t for t in topics)
+        assert any("battery_low" in t for t in topics)
