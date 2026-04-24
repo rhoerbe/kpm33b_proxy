@@ -12,6 +12,7 @@ from src.rfbridge.ha_discovery import (
     make_temperature_discovery_payload,
     publish_discovery,
 )
+from src.rfbridge.utils import sanitise_topic_name
 
 OUTPUT_PREFIX = "tele/433rfbridge"
 SENSOR_NAME = "living_room"
@@ -100,3 +101,41 @@ class TestClearDiscovery:
         assert any("temperature" in t for t in topics)
         assert any("humidity" in t for t in topics)
         assert any("battery_low" in t for t in topics)
+
+
+class TestSanitisedTopicNames:
+    """Verify that spaces and umlauts in friendly names are normalised in all topic paths."""
+
+    RAW_NAME = "EG Wohnküche"
+    SAFE_NAME = "EG_Wohnkueche"
+
+    def test_state_topic_uses_sanitised_name(self):
+        payload = make_temperature_discovery_payload(self.RAW_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        assert payload["state_topic"] == f"{OUTPUT_PREFIX}/{self.SAFE_NAME}/state"
+
+    def test_state_topic_no_raw_chars(self):
+        payload = make_temperature_discovery_payload(self.RAW_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        assert " " not in payload["state_topic"]
+        assert "ü" not in payload["state_topic"]
+
+    def test_discovery_topic_uses_sanitised_name(self):
+        topic = discovery_topic(self.RAW_NAME, "temperature")
+        assert self.SAFE_NAME in topic
+        assert " " not in topic
+        assert "ü" not in topic
+
+    def test_clear_discovery_uses_sanitised_name(self):
+        client = MagicMock()
+        client.publish.return_value = MagicMock(rc=mqtt.MQTT_ERR_SUCCESS)
+        clear_discovery(client, self.RAW_NAME)
+        topics = [c.args[0] for c in client.publish.call_args_list]
+        for t in topics:
+            assert " " not in t, f"Space found in topic: {t}"
+            assert "ü" not in t, f"Umlaut found in topic: {t}"
+        assert any(self.SAFE_NAME in t for t in topics)
+
+    def test_state_topic_matches_between_discovery_and_bridge_publish(self):
+        # The topic bridge.py will publish to must match ha_discovery.py's state_topic.
+        payload = make_temperature_discovery_payload(self.RAW_NAME, PROTOCOL, CHANNEL, OUTPUT_PREFIX)
+        expected_state_topic = f"{OUTPUT_PREFIX}/{sanitise_topic_name(self.RAW_NAME)}/state"
+        assert payload["state_topic"] == expected_state_topic

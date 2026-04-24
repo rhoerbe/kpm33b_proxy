@@ -8,6 +8,7 @@ import paho.mqtt.client as mqtt
 import pytest
 
 from src.rfbridge.bridge import RfBridgeConfig, RfBridgeMqttBridge
+from src.rfbridge.protocol import DecodedFrame
 
 
 MINIMAL_CFG = {
@@ -112,3 +113,43 @@ class TestTasmotaDiscoveryForwarding:
         bridge._forward_tasmota_discovery(msg)  # should not raise
         # Message still cached even on publish failure
         assert "tasmota/discovery/AABBCC/config" in bridge._tasmota_discovery_cache
+
+
+def _make_frame() -> DecodedFrame:
+    return DecodedFrame(
+        protocol="nexus_compatible",
+        sof=0,
+        device_id=0xAB,
+        battery_ok=True,
+        tx_button=False,
+        channel=1,
+        temperature=21.0,
+        humidity=50,
+        raw_data="AA B1 ...",
+    )
+
+
+class TestPublishStateSanitisation:
+    def test_state_topic_sanitises_spaces(self, bridge):
+        frame = _make_frame()
+        bridge._publish_state("EG Wohnzimmer", frame)
+        topic = bridge._central.publish.call_args.args[0]
+        assert " " not in topic
+        assert topic == "tele/433rfbridge/EG_Wohnzimmer/state"
+
+    def test_state_topic_sanitises_umlauts(self, bridge):
+        frame = _make_frame()
+        bridge._publish_state("EG Wohnküche", frame)
+        topic = bridge._central.publish.call_args.args[0]
+        assert "ü" not in topic
+        assert topic == "tele/433rfbridge/EG_Wohnkueche/state"
+
+    def test_state_topic_matches_discovery_state_topic(self, bridge):
+        from src.rfbridge.ha_discovery import make_temperature_discovery_payload
+        raw_name = "EG Wohnküche"
+        frame = _make_frame()
+        bridge._publish_state(raw_name, frame)
+        published_topic = bridge._central.publish.call_args.args[0]
+        # Strip the /state suffix to get the prefix for comparison
+        discovery_payload = make_temperature_discovery_payload(raw_name, "nexus_compatible", 1, "tele/433rfbridge")
+        assert discovery_payload["state_topic"] == published_topic

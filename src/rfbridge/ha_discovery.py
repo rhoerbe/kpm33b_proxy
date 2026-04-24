@@ -20,6 +20,8 @@ import logging
 
 import paho.mqtt.client as mqtt
 
+from src.rfbridge.utils import sanitise_topic_name
+
 logger = logging.getLogger(__name__)
 
 DISCOVERY_PREFIX = "homeassistant"
@@ -42,7 +44,7 @@ def _device_block(friendly_name: str, protocol: str, channel: int) -> dict:
 
 
 def _state_topic(output_topic_prefix: str, friendly_name: str) -> str:
-    return f"{output_topic_prefix}/{friendly_name}/state"
+    return f"{output_topic_prefix}/{sanitise_topic_name(friendly_name)}/state"
 
 
 def make_temperature_discovery_payload(
@@ -95,15 +97,17 @@ def make_battery_low_discovery_payload(
 
 def discovery_topic(friendly_name: str, sensor_type: str) -> str:
     component = "binary_sensor" if sensor_type == "battery_low" else "sensor"
-    return f"{DISCOVERY_PREFIX}/{component}/433rfbridge_{friendly_name}_{sensor_type}/config"
+    safe = sanitise_topic_name(friendly_name)
+    return f"{DISCOVERY_PREFIX}/{component}/433rfbridge_{safe}_{sensor_type}/config"
 
 
 def clear_discovery(client: mqtt.Client, friendly_name: str) -> None:
     """Remove all retained discovery entries for a sensor (e.g. after rename/removal)."""
+    safe = sanitise_topic_name(friendly_name)
     for sensor_type in ("temperature", "humidity"):
-        topic = f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{friendly_name}_{sensor_type}/config"
+        topic = f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{safe}_{sensor_type}/config"
         client.publish(topic, b"", qos=1, retain=True)
-    topic = f"{DISCOVERY_PREFIX}/binary_sensor/433rfbridge_{friendly_name}_battery_low/config"
+    topic = f"{DISCOVERY_PREFIX}/binary_sensor/433rfbridge_{safe}_battery_low/config"
     client.publish(topic, b"", qos=1, retain=True)
     logger.info("Cleared HA discovery entries for removed/renamed sensor '%s'", friendly_name)
 
@@ -121,7 +125,7 @@ def publish_discovery(
     Any stale sensor-component entry for battery_low is cleared on each publish.
     """
     # Clear stale sensor-component entry for battery_low (published before binary_sensor fix)
-    stale_topic = f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{friendly_name}_battery_low/config"
+    stale_topic = f"{DISCOVERY_PREFIX}/sensor/433rfbridge_{sanitise_topic_name(friendly_name)}_battery_low/config"
     client.publish(stale_topic, b"", qos=1, retain=True)
 
     entities = [

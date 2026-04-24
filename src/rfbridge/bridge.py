@@ -22,6 +22,7 @@ import paho.mqtt.client as mqtt
 from src.rfbridge.ha_discovery import clear_discovery, publish_discovery
 from src.rfbridge.protocol import DecodedFrame, parse_rfraw_payload
 from src.rfbridge.sensor_registry import DeadSensorRegistry, Deduplicator, SensorRegistry
+from src.rfbridge.utils import sanitise_topic_name
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ class RfBridgeMqttBridge:
         self._publish_state(friendly_name, frame)
 
     def _publish_state(self, friendly_name: str, frame: DecodedFrame) -> None:
-        topic = f"{self.config.output_topic_prefix}/{friendly_name}/state"
+        topic = f"{self.config.output_topic_prefix}/{sanitise_topic_name(friendly_name)}/state"
         payload = json.dumps({
             "temperature": frame.temperature,
             "humidity": frame.humidity,
