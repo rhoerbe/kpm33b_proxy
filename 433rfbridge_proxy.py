@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""433 MHz RF Bridge MQTT Proxy — Portisch/Tasmota AA B1 Frame Decoder.
+"""433 MHz RF Bridge MQTT Proxy — entry point.
 
-Subscribes to the internal broker for raw RF data from a Sonoff RF Bridge
-running Tasmota + Portisch firmware, decodes PDM bucket frames, maps sensor
-IDs to friendly names, and republishes structured JSON to the central broker.
+This script is the entry point loaded by deploy/433rfbridge-proxy.service.
+It loads config.yaml and sensors.yaml, instantiates RfBridgeMqttBridge,
+handles SIGTERM/SIGINT, and runs the periodic maintenance loop.
+
+All business logic lives in src/rfbridge/:
+  bridge.py          — RfBridgeConfig, RfBridgeMqttBridge (two-broker MQTT bridge)
+  ha_discovery.py    — Home Assistant MQTT autodiscovery payloads and publishing
+  protocol.py        — AA B1 frame parser (Portisch/Tasmota Nexus-compatible sensors)
+  sensor_registry.py — Persistent sensor name↔ID mapping, deduplication, dead-sensor tracking
+  utils.py           — Shared helpers (sanitise_topic_name)
 """
 
 import logging
