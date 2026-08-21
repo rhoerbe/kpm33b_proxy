@@ -521,20 +521,44 @@ class TestDuplicateFiltering:
         assert second_count > first_count
 
     def test_is_duplicate_returns_true_for_seen(self, bridge):
-        """_is_duplicate_message returns True for previously seen id+timestamp."""
-        bridge._is_duplicate_message("33B1225950028", "20260218103000")
-        assert bridge._is_duplicate_message("33B1225950028", "20260218103000") is True
+        """_is_duplicate_message returns True for previously seen topic+id+timestamp."""
+        bridge._is_duplicate_message("MQTT_RT_DATA", "33B1225950028", "20260218103000")
+        assert bridge._is_duplicate_message("MQTT_RT_DATA", "33B1225950028", "20260218103000") is True
 
     def test_is_duplicate_returns_false_for_new(self, bridge):
-        """_is_duplicate_message returns False for new id+timestamp."""
-        assert bridge._is_duplicate_message("33B1225950028", "20260218103000") is False
+        """_is_duplicate_message returns False for new topic+id+timestamp."""
+        assert bridge._is_duplicate_message("MQTT_RT_DATA", "33B1225950028", "20260218103000") is False
+
+    def test_seconds_and_minutes_with_same_timestamp_both_pass(self, bridge):
+        """Regression (issue #12): on every full minute both messages carry the same `time`."""
+        assert bridge._is_duplicate_message("MQTT_ENY_NOW", "33B1225950027", "20260821112200") is False
+        assert bridge._is_duplicate_message("MQTT_RT_DATA", "33B1225950027", "20260821112200") is False
+
+    def test_minute_message_does_not_swallow_seconds_message(self, bridge):
+        """The seconds message must still be forwarded after the minute message of the same minute."""
+        eny = self._make_msg("MQTT_ENY_NOW", {
+            "id": "33B1225950027", "time": "20260821112200", "zygsz": 1729.523, "isend": "1",
+        })
+        rt = self._make_msg("MQTT_RT_DATA", {
+            "id": "33B1225950027", "time": "20260821112200", "zyggl": 4.2, "isend": "1",
+        })
+        bridge.central_client.publish = MagicMock(return_value=MagicMock(rc=0))
+
+        bridge._on_internal_message(None, None, eny)
+        bridge._on_internal_message(None, None, rt)
+
+        data_topics = [
+            c.args[0] for c in bridge.central_client.publish.call_args_list
+            if not c.args[0].startswith("homeassistant/")
+        ]
+        assert data_topics == ["kpm33b/33B1225950027/minutes", "kpm33b/33B1225950027/seconds"]
 
     def test_seen_messages_dict_bounded(self, bridge):
         """_seen_messages dict should not exceed duplicate_dict_max_length."""
         max_length = bridge.config.kpm33b_meters.duplicate_dict_max_length
         # Add more messages than the limit
         for i in range(max_length + 10):
-            bridge._is_duplicate_message(f"33B12259500{i:02d}", f"202602181030{i:02d}")
+            bridge._is_duplicate_message("MQTT_RT_DATA", f"33B12259500{i:02d}", f"202602181030{i:02d}")
 
         assert len(bridge._seen_messages) <= max_length
 
@@ -545,15 +569,15 @@ class TestDuplicateFiltering:
 
         # Add 5 messages
         for i in range(5):
-            bridge._is_duplicate_message(f"DEV{i}", f"TIME{i}")
+            bridge._is_duplicate_message("MQTT_RT_DATA", f"DEV{i}", f"TIME{i}")
 
         # Add one more
-        bridge._is_duplicate_message("DEV5", "TIME5")
+        bridge._is_duplicate_message("MQTT_RT_DATA", "DEV5", "TIME5")
 
         # First entry should be evicted
-        assert "DEV0_TIME0" not in bridge._seen_messages
+        assert "MQTT_RT_DATA_DEV0_TIME0" not in bridge._seen_messages
         # Last entry should remain
-        assert "DEV5_TIME5" in bridge._seen_messages
+        assert "MQTT_RT_DATA_DEV5_TIME5" in bridge._seen_messages
 
 
 class TestPerPhaseForwarding:
