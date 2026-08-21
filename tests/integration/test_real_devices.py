@@ -135,6 +135,13 @@ METER_LAST8 = "25950028"
 TIMEOUT_CONFIG = 30  # seconds — generous timeout for broker round-trip
 
 
+# Writing config to a real meter changes how often that meter uploads, which
+# corrupts any ongoing measurement campaign (see issue #12 / hadmin#101).
+# Opt in explicitly; $MQTTPW alone is not enough.
+LIVE_WRITES_ENABLED = os.environ.get("KPM33B_LIVE_METER_WRITES") == "1"
+
+
+@pytest.mark.skipif(not LIVE_WRITES_ENABLED, reason="KPM33B_LIVE_METER_WRITES=1 not set")
 class TestRealDeviceConfigSender:
     """Send upload frequency config to a real meter via MQTT_COMMOD_SET_<last8>."""
 

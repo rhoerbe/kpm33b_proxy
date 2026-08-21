@@ -101,15 +101,21 @@ class MqttBridge:
             return False
         return True
 
-    def _is_duplicate_message(self, device_id: str, timestamp: str) -> bool:
-        """Check if a message with this device_id+timestamp has been seen before.
+    def _is_duplicate_message(self, topic: str, device_id: str, timestamp: str) -> bool:
+        """Check if a message with this topic+device_id+timestamp has been seen before.
+
+        The topic is part of the key because the seconds- and minutes-level messages of
+        a meter share the same `time` value on every full minute. Keying on
+        device_id+timestamp alone made the minute message swallow the seconds message
+        that followed it, so HA saw the power sensor update once per minute instead of
+        every 30 s (issue #12).
 
         Returns True if duplicate (should be dropped), False if new (first occurrence).
         Maintains an ordered dict bounded by duplicate_dict_max_length.
         """
-        key = f"{device_id}_{timestamp}"
+        key = f"{topic}_{device_id}_{timestamp}"
         if key in self._seen_messages:
-            logger.debug("Duplicate message for %s at %s", device_id, timestamp)
+            logger.debug("Duplicate message on %s for %s at %s", topic, device_id, timestamp)
             return True
 
         # Track this message
@@ -139,7 +145,7 @@ class MqttBridge:
         # Filter duplicate messages (same device_id + timestamp)
         device_id = raw.get("id", "unknown")
         timestamp = raw.get("time", "")
-        if self._is_duplicate_message(device_id, timestamp):
+        if self._is_duplicate_message(topic, device_id, timestamp):
             return
 
         topics = self.config.internal_broker_topics
@@ -147,7 +153,8 @@ class MqttBridge:
 
         try:
             if topic == topics.meter_seconds_data:
-                transformed = transform_rt_data(raw)
+                per_phase_groups = self.config.kpm33b_meters.per_phase_groups_for(raw.get("id", ""))
+                transformed = transform_rt_data(raw, per_phase_groups)
                 device_id = transformed.get("id", "unknown")
                 topic_prefix = self._build_topic_prefix(device_id)
                 target_topic = f"{topic_prefix}/seconds"
@@ -174,13 +181,16 @@ class MqttBridge:
             self.discovered_meters.add(device_id)
             context = self._get_device_context(device_id)
             logger.info("New meter discovered: %s — publishing HA autodiscovery", device_id)
+            meters_cfg = self.config.kpm33b_meters
             publish_discovery(
                 self.central_client,
                 device_id,
                 main_topic,
                 context,
-                self.config.kpm33b_meters.upload_frequency_seconds,
-                self.config.kpm33b_meters.upload_frequency_minutes,
+                meters_cfg.upload_frequency_seconds_for(device_id),
+                meters_cfg.upload_frequency_minutes,
+                meters_cfg.per_phase_groups_for(device_id),
+                meters_cfg.expire_after_factor,
             )
 
         payload = json.dumps(transformed)

@@ -49,12 +49,27 @@ rfbridge_proxy:
 
 # Meter configuration
 kpm33b_meters:
-  upload_frequency_seconds: 30    # valid values: 30, 60, 300, 600, 900, 1200, 1800, 3600
+  upload_frequency_seconds: 60    # valid values: 30, 60, 300, 600, 900, 1200, 1800, 3600
   upload_frequency_minutes: 1     # valid values: 1, 5, 10, 15, 20, 30, 60, 1440
+  # Per-meter override of upload_frequency_seconds (applied by the config sender)
+  # upload_frequency_seconds_by_device:
+  #   "33B1225950027": 30
+  # HA expire_after = upload interval x this factor. Must be > 1; 2.5 tolerates two
+  # missed publishes while still flagging a genuinely dead meter as unavailable.
+  expire_after_factor: 2.5
+  # Meters that also publish per-phase values on the <meter>/seconds topic and get
+  # per-phase Home Assistant entities. Other meters keep the id/time/active_power payload.
+  # per_phase_device_ids:
+  #   - "33B1225950027"
+  # Per-phase quantities published for the meters above: current, power, voltage, power_factor
+  per_phase_groups:
+    - current
+    - power
+    - voltage
   # Ignore messages from fake/unused device IDs
   exclude_device_ids:
     - "33B120000000"
-  # Maximum number of messages to track for duplicate detection (key: device_id + timestamp)
+  # Maximum number of messages to track for duplicate detection (key: topic + device_id + timestamp)
   # Older entries are evicted when this limit is exceeded
   duplicate_dict_max_length: 30
   # Optional: Device context for MQTT topics AND Home Assistant device names
