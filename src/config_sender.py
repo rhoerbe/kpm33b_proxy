@@ -7,6 +7,7 @@ to meters via internal broker, and verifies acknowledgements.
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 BACKOFF_BASE = 1
 BACKOFF_MAX = 60
 ACK_TIMEOUT = 15.0
+
+# Fallback when a seconds message carries no "id" tag: a topic segment that looks like a meter ID
+METER_ID_PATTERN = re.compile(r"[A-Za-z0-9]{8,20}")
 
 
 def _make_oprid() -> str:
@@ -64,7 +68,9 @@ class ConfigSender:
             logger.error("Central broker connection failed: rc=%d", rc)
             return
         logger.info("Config sender connected to central broker")
-        discovery_topic = f"{self.config.central_broker_topics.external_main_topic}/+/seconds"
+        # Wildcard '#', not '+/seconds': meters with a device_context publish under
+        # <main>/<context>/<meter_id>/seconds, which '+' cannot match (issue #12).
+        discovery_topic = f"{self.config.central_broker_topics.external_main_topic}/#"
         client.subscribe(discovery_topic)
         logger.info("Subscribed to %s for meter discovery", discovery_topic)
 
@@ -75,13 +81,32 @@ class ConfigSender:
     def _on_central_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
         """Handle discovery messages from central broker."""
         parts = msg.topic.split("/")
-        if len(parts) < 3:
+        if len(parts) < 3 or parts[-1] != "seconds":
             return
-        meter_id = parts[-2]
+        meter_id = self._meter_id_from_message(msg, parts[-2])
+        if meter_id is None:
+            return
+        excluded = self.config.kpm33b_meters.exclude_device_ids
+        if excluded and meter_id in excluded:
+            return
         if meter_id not in self.known_meters:
             logger.info("Discovered new meter: %s", meter_id)
             self.known_meters.add(meter_id)
             self._send_config_to_meter(meter_id)
+
+    @staticmethod
+    def _meter_id_from_message(msg: mqtt.MQTTMessage, topic_meter_id: str) -> str | None:
+        """Meter ID of a seconds message — from the payload if present, else from the topic."""
+        try:
+            payload = json.loads(msg.payload)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            payload = None
+        if isinstance(payload, dict) and payload.get("id"):
+            return str(payload["id"])
+        if METER_ID_PATTERN.fullmatch(topic_meter_id):
+            return topic_meter_id
+        logger.debug("No meter ID in message on %s", msg.topic)
+        return None
 
     def _on_internal_connect(self, client: mqtt.Client, userdata, flags, rc: int) -> None:
         if rc != 0:
@@ -118,7 +143,9 @@ class ConfigSender:
         topic = f"{topic_prefix}{last8}"
         meters_cfg = self.config.kpm33b_meters
 
-        self._send_command(topic, meter_id, cmd="0000", value=str(meters_cfg.upload_frequency_seconds))
+        self._send_command(
+            topic, meter_id, cmd="0000", value=str(meters_cfg.upload_frequency_seconds_for(meter_id))
+        )
         self._send_command(topic, meter_id, cmd="0001", value=str(meters_cfg.upload_frequency_minutes))
 
     def _send_command(self, topic: str, meter_id: str, cmd: str, value: str) -> None:

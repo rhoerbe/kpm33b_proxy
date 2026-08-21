@@ -133,9 +133,7 @@ class TestOnInternalMessage:
 
         bridge._on_internal_message(None, None, msg)
 
-        # First message triggers HA discovery (2 calls) + data publish (1 call)
-        assert bridge.central_client.publish.call_count == 3
-        # Data publish is the last call
+        # Data publish is the last call (HA discovery fires first)
         data_call = bridge.central_client.publish.call_args_list[-1]
         assert data_call.args[0] == "kpm33b/33B1225950027/seconds"
         published = json.loads(data_call.args[1])
@@ -192,11 +190,13 @@ class TestOnInternalMessage:
 
         bridge._on_internal_message(None, None, msg)
 
-        # Should publish 2 discovery configs + 1 data message
-        assert bridge.central_client.publish.call_count == 3
-        topics = [c.args[0] for c in bridge.central_client.publish.call_args_list]
-        assert "homeassistant/sensor/kpm33b_33B1225950027/power/config" in topics
-        assert "homeassistant/sensor/kpm33b_33B1225950027/energy/config" in topics
+        calls = bridge.central_client.publish.call_args_list
+        config_topics = [c.args[0] for c in calls if c.args[0].startswith("homeassistant/") and c.args[1]]
+        assert config_topics == [
+            "homeassistant/sensor/kpm33b_33B1225950027/power/config",
+            "homeassistant/sensor/kpm33b_33B1225950027/energy/config",
+        ]
+        assert calls[-1].args[0] == "kpm33b/33B1225950027/seconds"
 
     def test_ha_discovery_not_repeated(self, bridge):
         """HA autodiscovery should only be published once per meter."""
@@ -211,13 +211,12 @@ class TestOnInternalMessage:
         bridge._on_internal_message(None, None, msg1)
         first_count = bridge.central_client.publish.call_count
 
-        # Second message with different timestamp — no discovery
+        # Second message with different timestamp — no discovery, only the data publish
         bridge._on_internal_message(None, None, msg2)
         second_count = bridge.central_client.publish.call_count
 
-        # First: 2 discovery + 1 data = 3; Second: only 1 data
-        assert first_count == 3
-        assert second_count == 4  # 3 + 1 more data publish
+        assert second_count == first_count + 1
+        assert bridge.central_client.publish.call_args_list[-1].args[0] == "kpm33b/33B1225950027/seconds"
 
 
 class TestDeviceIdExclusion:
@@ -555,3 +554,69 @@ class TestDuplicateFiltering:
         assert "DEV0_TIME0" not in bridge._seen_messages
         # Last entry should remain
         assert "DEV5_TIME5" in bridge._seen_messages
+
+
+class TestPerPhaseForwarding:
+    """Per-phase payload extension per issue #12."""
+
+    RT_PAYLOAD = {
+        "id": "33B1225950027", "time": "20260112163900",
+        "ia": 9.735, "ib": 9.658, "ic": 9.655,
+        "ua": 229.097, "ub": 231.567, "uc": 232.529,
+        "pa": 2.2229, "pb": 2.2293, "pc": 2.2382,
+        "zyggl": 6.6905, "zglys": 0.996, "isend": "1",
+    }
+
+    def _make_msg(self, topic: str, payload: dict) -> MagicMock:
+        msg = MagicMock()
+        msg.topic = topic
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    def _bridge(self, per_phase_device_ids: list[str], config: AppConfig) -> MqttBridge:
+        config.kpm33b_meters.per_phase_device_ids = per_phase_device_ids
+        with patch("src.bridge.mqtt.Client", side_effect=lambda **kw: MagicMock()):
+            bridge = MqttBridge(config)
+        bridge.central_client.publish = MagicMock(return_value=MagicMock(rc=0))
+        return bridge
+
+    def test_enabled_meter_gets_per_phase_fields(self, config):
+        bridge = self._bridge(["33B1225950027"], config)
+        bridge._on_internal_message(None, None, self._make_msg("MQTT_RT_DATA", self.RT_PAYLOAD))
+
+        published = json.loads(bridge.central_client.publish.call_args_list[-1].args[1])
+        assert published["active_power"] == 6.6905
+        assert published["current_l1"] == 9.735
+        assert published["active_power_l2"] == 2.2293
+        assert published["voltage_l3"] == 232.529
+
+    def test_disabled_meter_payload_unchanged(self, config):
+        bridge = self._bridge(["33B1225950029"], config)
+        bridge._on_internal_message(None, None, self._make_msg("MQTT_RT_DATA", self.RT_PAYLOAD))
+
+        published = json.loads(bridge.central_client.publish.call_args_list[-1].args[1])
+        assert set(published.keys()) == {"id", "time", "active_power"}
+
+    def test_enabled_meter_gets_per_phase_discovery(self, config):
+        bridge = self._bridge(["33B1225950027"], config)
+        bridge._on_internal_message(None, None, self._make_msg("MQTT_RT_DATA", self.RT_PAYLOAD))
+
+        configs = {
+            c.args[0]: c.args[1]
+            for c in bridge.central_client.publish.call_args_list
+            if c.args[0].startswith("homeassistant/") and c.args[1]
+        }
+        assert "homeassistant/sensor/kpm33b_33B1225950027/current_l1/config" in configs
+        assert "homeassistant/sensor/kpm33b_33B1225950027/power_factor/config" not in configs
+
+    def test_expire_after_uses_per_device_frequency(self, config):
+        config.kpm33b_meters.upload_frequency_seconds_by_device = {"33B1225950027": 30}
+        bridge = self._bridge([], config)
+        bridge._on_internal_message(None, None, self._make_msg("MQTT_RT_DATA", self.RT_PAYLOAD))
+
+        power_config = next(
+            json.loads(c.args[1])
+            for c in bridge.central_client.publish.call_args_list
+            if c.args[0].endswith("/power/config")
+        )
+        assert power_config["expire_after"] == 75

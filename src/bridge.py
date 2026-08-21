@@ -147,7 +147,8 @@ class MqttBridge:
 
         try:
             if topic == topics.meter_seconds_data:
-                transformed = transform_rt_data(raw)
+                per_phase_groups = self.config.kpm33b_meters.per_phase_groups_for(raw.get("id", ""))
+                transformed = transform_rt_data(raw, per_phase_groups)
                 device_id = transformed.get("id", "unknown")
                 topic_prefix = self._build_topic_prefix(device_id)
                 target_topic = f"{topic_prefix}/seconds"
@@ -174,13 +175,16 @@ class MqttBridge:
             self.discovered_meters.add(device_id)
             context = self._get_device_context(device_id)
             logger.info("New meter discovered: %s — publishing HA autodiscovery", device_id)
+            meters_cfg = self.config.kpm33b_meters
             publish_discovery(
                 self.central_client,
                 device_id,
                 main_topic,
                 context,
-                self.config.kpm33b_meters.upload_frequency_seconds,
-                self.config.kpm33b_meters.upload_frequency_minutes,
+                meters_cfg.upload_frequency_seconds_for(device_id),
+                meters_cfg.upload_frequency_minutes,
+                meters_cfg.per_phase_groups_for(device_id),
+                meters_cfg.expire_after_factor,
             )
 
         payload = json.dumps(transformed)

@@ -22,6 +22,28 @@ The profile defines how the meter MQTT messages are mapped as follows:
 | `MQTT_ENY_NOW` | `time`  | time           | YYYYMMDDHHMMDD             |      | 
 | `MQTT_ENY_NOW` | `zygsz` | active_energy  | Import Total Active Energy | kWh  |
 
+4. Optional per-phase detail (issue #12). Only meters listed in `per_phase_device_ids`
+   get these fields, and only for the groups listed in `per_phase_groups`; every other
+   meter keeps the id/time/active_power payload above unchanged. The fields are appended
+   to the same `MQTT_RT_DATA` output message (no additional topics), so existing
+   subscribers of `active_power` are unaffected.
+
+| Input Topic    | Group          | Tag     | Output Name       | Parameter Description        | Unit |
+|:---------------|:---------------|:--------|:------------------|:-----------------------------|:-----|
+| `MQTT_RT_DATA` | `current`      | `ia`    | current_l1        | Phase A current              | A    |
+| `MQTT_RT_DATA` | `current`      | `ib`    | current_l2        | Phase B current              | A    |
+| `MQTT_RT_DATA` | `current`      | `ic`    | current_l3        | Phase C current              | A    |
+| `MQTT_RT_DATA` | `power`        | `pa`    | active_power_l1   | Phase A active power         | kW   |
+| `MQTT_RT_DATA` | `power`        | `pb`    | active_power_l2   | Phase B active power         | kW   |
+| `MQTT_RT_DATA` | `power`        | `pc`    | active_power_l3   | Phase C active power         | kW   |
+| `MQTT_RT_DATA` | `voltage`      | `ua`    | voltage_l1        | Phase A phase voltage        | V    |
+| `MQTT_RT_DATA` | `voltage`      | `ub`    | voltage_l2        | Phase B phase voltage        | V    |
+| `MQTT_RT_DATA` | `voltage`      | `uc`    | voltage_l3        | Phase C phase voltage        | V    |
+| `MQTT_RT_DATA` | `power_factor` | `pfa`   | power_factor_l1   | Phase A power factor         |      |
+| `MQTT_RT_DATA` | `power_factor` | `pfb`   | power_factor_l2   | Phase B power factor         |      |
+| `MQTT_RT_DATA` | `power_factor` | `pfc`   | power_factor_l3   | Phase C power factor         |      |
+| `MQTT_RT_DATA` | `power_factor` | `zglys` | power_factor      | Total power factor           |      |
+
 
 ### Test Data (`MQTT_RT_DATA.json`)
 

@@ -84,12 +84,56 @@ class TestMeterDiscovery:
 
         mock_send.assert_not_called()
 
+    def test_meter_with_device_context_discovered(self, sender):
+        """Regression (issue #12): contexts add a topic level, which '+' never matched."""
+        msg = MagicMock()
+        msg.topic = "kpm33b/Carport/Wallbox Zähler/33B1225950027/seconds"
+        msg.payload = b'{"id":"33B1225950027","time":"20260112163900","active_power":6.6905}'
+
+        with patch.object(sender, "_send_config_to_meter") as mock_send:
+            sender._on_central_message(None, None, msg)
+
+        mock_send.assert_called_once_with("33B1225950027")
+
+    def test_minutes_topic_ignored(self, sender):
+        msg = MagicMock()
+        msg.topic = "kpm33b/33B1225950027/minutes"
+        msg.payload = b'{"id":"33B1225950027","active_energy":1729.5}'
+
+        with patch.object(sender, "_send_config_to_meter") as mock_send:
+            sender._on_central_message(None, None, msg)
+
+        mock_send.assert_not_called()
+
+    def test_excluded_meter_ignored(self, config):
+        config.kpm33b_meters.exclude_device_ids = ["33B1225950027"]
+        with patch("src.config_sender.mqtt.Client", side_effect=lambda **kw: MagicMock()):
+            sender = ConfigSender(config)
+        msg = MagicMock()
+        msg.topic = "kpm33b/33B1225950027/seconds"
+        msg.payload = b'{"id":"33B1225950027"}'
+
+        with patch.object(sender, "_send_config_to_meter") as mock_send:
+            sender._on_central_message(None, None, msg)
+
+        mock_send.assert_not_called()
+
+    def test_non_meter_topic_ignored(self, sender):
+        msg = MagicMock()
+        msg.topic = "kpm33b/status/seconds"
+        msg.payload = b'not json'
+
+        with patch.object(sender, "_send_config_to_meter") as mock_send:
+            sender._on_central_message(None, None, msg)
+
+        mock_send.assert_not_called()
+
 
 class TestCentralConnect:
     def test_subscribes_to_discovery_topic(self, sender):
         mock_client = MagicMock()
         sender._on_central_connect(mock_client, None, {}, 0)
-        mock_client.subscribe.assert_called_once_with("kpm33b/+/seconds")
+        mock_client.subscribe.assert_called_once_with("kpm33b/#")
 
     def test_connection_failure(self, sender):
         mock_client = MagicMock()
@@ -102,6 +146,21 @@ class TestInternalConnect:
         mock_client = MagicMock()
         sender._on_internal_connect(mock_client, None, {}, 0)
         mock_client.subscribe.assert_called_once_with("MQTT_COMMOD_SET_REP")
+
+
+class TestPerDeviceUploadFrequency:
+    def test_override_applies_to_named_meter(self, config):
+        config.kpm33b_meters.upload_frequency_seconds_by_device = {"33B1225950027": 30}
+        with patch("src.config_sender.mqtt.Client", side_effect=lambda **kw: MagicMock()):
+            sender = ConfigSender(config)
+        sender.internal_client.publish = MagicMock(return_value=MagicMock(rc=0))
+
+        with patch.object(ConfigSender, "_send_command") as mock_cmd:
+            sender._send_config_to_meter("33B1225950027")
+            sender._send_config_to_meter("33B1225950028")
+
+        seconds_values = [c.kwargs["value"] for c in mock_cmd.call_args_list if c.kwargs["cmd"] == "0000"]
+        assert seconds_values == ["30", "5"]
 
 
 class TestSendConfig:
